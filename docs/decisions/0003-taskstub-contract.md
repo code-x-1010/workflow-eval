@@ -49,5 +49,7 @@ scoping, same reasoning.
   boundary (`testgen/` still never imports `wfeval.core.ast`).
 
 ## Sign-off
-- [ ] P2 — please confirm the shape, or counter-propose in a superseding record
+- [x] P2 — shape accepted unchanged. See `0005` for the emission rules that
+  follow from it (P2 emits `asset_ref`-keyed stubs only; `element_id` is
+  unreachable from testgen without breaking anti-circularity).
 - [x] P3
