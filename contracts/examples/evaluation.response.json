@@ -1,0 +1,15 @@
+{
+  "_note": "What the generation team actually receives. Assembled by the Gateway from all four service slices.",
+  "evaluation_id": "ev_stub_0001",
+  "request_id": "gen-7f3a91",
+  "platform": "uipath_maestro",
+  "verdict": "pass_with_warnings",
+  "scoring_version": "0.1.0",
+  "overall": 0.81,
+  "validation": null,
+  "intent": null,
+  "execution": null,
+  "cost": null,
+  "timings_ms": { "validation": 340, "intent": 2900, "deploy": 4100, "execution": 61200, "cost": 210 },
+  "short_circuited_at": null
+}

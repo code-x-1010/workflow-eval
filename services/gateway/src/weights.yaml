@@ -1,0 +1,14 @@
+# Owner: P4. Versioned so historical comparisons stay honest.
+scoring_version: "0.1.0"
+weights:
+  structural_soundness: 0.35   # P1
+  intent_coverage:      0.35   # P2
+  execution_pass_rate:  0.30   # P3
+  # cost is NOT weighted -- reported as an independent dimension.
+gates:                          # binary, hard fail
+  - schema_validity
+  - reference_integrity
+  - platform_acceptance
+thresholds:
+  fail_below:               0.60
+  pass_with_warnings_below: 0.85

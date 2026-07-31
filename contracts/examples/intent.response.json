@@ -1,0 +1,15 @@
+{
+  "scores": { "intent_coverage": 0.75 },
+  "diagnostics": [
+    {
+      "code": "INT-NO-ERROR-HANDLING",
+      "severity": "warning",
+      "message": "Spec step s3 (auto-pay) is side-effecting but Task_autopay has no boundary error event.",
+      "suggested_fix": "Attach a boundary error event to Task_autopay routing to an escalation path.",
+      "element_id": "Task_autopay",
+      "locator": "/definitions/process/serviceTask[@id='Task_autopay']"
+    }
+  ],
+  "judge_agreement": 0.86,
+  "spec_source": "extracted"
+}

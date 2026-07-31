@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.cache/
+reports/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+sandbox-infra/.env

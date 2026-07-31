@@ -1,0 +1,31 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-extras
+      - name: lint
+        run: uv run ruff check . && uv run mypy --strict packages services
+      - name: import boundaries (incl. testgen anti-circularity)
+        run: uv run lint-imports
+      - name: unit
+        run: uv run pytest tests/unit -q
+      - name: contract   # must be green from D3 onward
+        run: uv run pytest tests/contract -q
+      - name: diagnostic code ownership
+        run: uv run pytest tests/contract/test_code_ownership.py -q
+
+  # Nightly regression over the frozen corpus. Compares against datasets/golden.
+  corpus:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-extras
+      - run: WFEVAL_STUB_DEPS=1 uv run python scripts/run_corpus.py --corpus datasets/corpus

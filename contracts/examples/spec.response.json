@@ -1,0 +1,32 @@
+{
+  "spec": {
+    "trigger": "Invoice received by email",
+    "steps": [
+      { "id": "s1", "description": "Extract vendor, amount, line items", "kind_hint": "agent", "depends_on": [], "is_deterministic": false, "side_effecting": false },
+      { "id": "s2", "description": "Route to manager approval if amount over 10000", "kind_hint": "decision", "depends_on": ["s1"], "is_deterministic": true, "side_effecting": false },
+      { "id": "s3", "description": "Auto-pay when under threshold", "kind_hint": "service", "depends_on": ["s2"], "is_deterministic": true, "side_effecting": true },
+      { "id": "s4", "description": "Notify vendor on settlement", "kind_hint": "service", "depends_on": ["s3"], "is_deterministic": true, "side_effecting": true }
+    ],
+    "inputs": [
+      { "name": "amount", "type": "decimal", "required": true, "bound": null },
+      { "name": "line_items", "type": "array", "required": true, "bound": 50 }
+    ],
+    "outputs": [{ "name": "status", "type": "string", "required": true, "bound": null }],
+    "branches": [
+      { "description": "amount over 10000 requires approval", "expression_hint": "amount > 10000", "probability_hint": 0.1 }
+    ],
+    "error_behaviour": null,
+    "integrations": ["email", "payments_api"],
+    "budget_per_instance": 0.50,
+    "source": "extracted"
+  },
+  "sufficiency_diagnostics": [
+    {
+      "code": "SPEC-NO-ERROR-BEHAVIOUR",
+      "severity": "warning",
+      "message": "The prompt does not state what should happen when the payments API fails.",
+      "suggested_fix": "Ask the user whether a failed payment should retry, escalate, or park the invoice.",
+      "element_id": null, "locator": null
+    }
+  ]
+}

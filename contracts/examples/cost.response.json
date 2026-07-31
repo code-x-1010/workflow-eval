@@ -1,0 +1,23 @@
+{
+  "currency": "USD",
+  "pricing_version": "2026-07-15",
+  "confidence": "low",
+  "per_instance": { "min": 0.031, "expected": 0.164, "max": 2.480 },
+  "expression": "0.031 + 0.012*N_line_items + 0.089*P(approval)",
+  "unbounded": false,
+  "by_resource": { "llm_tokens": 0.118, "robot_units": 0.031, "human_minutes": 0.011, "external_api": 0.004 },
+  "hotspots": [
+    { "element_id": "Task_extract", "share": 0.62, "code": "COST-LLM-IN-LOOP" }
+  ],
+  "assumptions": [
+    "Branch probability for Gateway_amount taken from the prompt (10% approval), not from execution history.",
+    "Agent turn count prior = 3.2 for the extraction archetype, uncalibrated (0 runs).",
+    "api.mail.internal is not in the price book; excluded from the total."
+  ],
+  "diagnostics": [
+    { "code": "COST-AGENT-FOR-DETERMINISTIC-DECISION", "severity": "info",
+      "message": "Task_extract uses an agent for field extraction, but spec step s2 (threshold routing) is deterministic and is currently folded into the same agent call.",
+      "suggested_fix": "Move the over/under 10000 decision into a DMN decision table; it is deterministic and costs approximately nothing.",
+      "element_id": "Task_extract", "locator": null }
+  ]
+}

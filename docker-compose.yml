@@ -1,0 +1,50 @@
+# All five services plus deps. WFEVAL_STUB_DEPS=1 (the default via `make dev`)
+# makes every service serve contracts/examples/ instead of calling neighbours,
+# so any agent can run the whole stack regardless of what the others have built.
+x-svc: &svc
+  build: { context: ., dockerfile: Dockerfile }
+  environment:
+    WFEVAL_STUB_DEPS: "${WFEVAL_STUB_DEPS:-1}"
+  volumes: [".:/app"]
+
+services:
+  gateway:
+    <<: *svc
+    command: uvicorn services.gateway.src.main:app --host 0.0.0.0 --port 8000 --reload
+    ports: ["8000:8000"]
+    depends_on: [validation, intent, sandbox, cost]
+
+  validation:
+    <<: *svc
+    command: uvicorn services.validation.src.main:app --host 0.0.0.0 --port 8001 --reload
+    ports: ["8001:8001"]
+
+  intent:
+    <<: *svc
+    command: uvicorn services.intent.src.main:app --host 0.0.0.0 --port 8002 --reload
+    ports: ["8002:8002"]
+
+  sandbox:
+    <<: *svc
+    command: uvicorn services.sandbox.src.main:app --host 0.0.0.0 --port 8003 --reload
+    ports: ["8003:8003"]
+    env_file: [sandbox-infra/.env]      # UiPath creds. gitignored. P3 only.
+
+  cost:
+    <<: *svc
+    command: uvicorn services.cost.src.main:app --host 0.0.0.0 --port 8004 --reload
+    ports: ["8004:8004"]
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    ports: ["8080:8080"]
+    volumes: ["./sandbox-infra/mocks:/home/wiremock/mappings"]
+
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_PASSWORD: wfeval, POSTGRES_DB: wfeval }
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]

@@ -1,0 +1,61 @@
+{
+  "_note": "P2 -> P3 handshake. P3 builds their entire execution loop against this file from D3, six days before P2's generator works. Element ids match artifact.bpmn.",
+  "test_cases": [
+    {
+      "case_id": "tc_001", "kind": "happy",
+      "description": "Under threshold invoice pays automatically",
+      "input": { "vendor": "Acme Ltd", "amount": 250.00, "line_items": [{ "sku": "A1", "qty": 2 }] },
+      "assertions": [
+        { "type": "path", "description": "must take the auto-pay branch",
+          "must_traverse": ["Gateway_amount", "Task_autopay"], "must_not_traverse": ["Task_approval"] },
+        { "type": "output", "description": "settles", "field": "status", "equals": "SETTLED" },
+        { "type": "invariant", "description": "exactly one terminal event", "expr": "terminal_events == 1" }
+      ],
+      "human_task_outcomes": {}
+    },
+    {
+      "case_id": "tc_002", "kind": "boundary",
+      "description": "Exactly at the threshold. 'over 10000' excludes 10000 itself.",
+      "input": { "vendor": "Acme Ltd", "amount": 10000.00, "line_items": [{ "sku": "A1", "qty": 1 }] },
+      "assertions": [
+        { "type": "path", "description": "10000 is NOT over 10000 -> auto-pay",
+          "must_traverse": ["Task_autopay"], "must_not_traverse": ["Task_approval"] }
+      ],
+      "human_task_outcomes": {}
+    },
+    {
+      "case_id": "tc_003", "kind": "boundary",
+      "description": "One cent over the threshold routes to approval",
+      "input": { "vendor": "Acme Ltd", "amount": 10000.01, "line_items": [{ "sku": "A1", "qty": 1 }] },
+      "assertions": [
+        { "type": "path", "description": "must route to approval", "must_traverse": ["Task_approval"] },
+        { "type": "output", "description": "pends approval", "field": "status", "equals": "PENDING_APPROVAL" }
+      ],
+      "human_task_outcomes": { "Task_approval": "approved" }
+    },
+    {
+      "case_id": "tc_004", "kind": "adversarial",
+      "description": "Null amount must not crash the process",
+      "input": { "vendor": "Acme Ltd", "amount": null, "line_items": [] },
+      "assertions": [
+        { "type": "invariant", "description": "no unhandled fault", "expr": "status != 'faulted'" }
+      ],
+      "human_task_outcomes": {}
+    },
+    {
+      "case_id": "tc_005", "kind": "adversarial",
+      "description": "Max line items exercises the loop bound and the cost ceiling",
+      "input": { "vendor": "Acme Ltd", "amount": 900.00, "line_items": "<<50 items>>" },
+      "assertions": [
+        { "type": "budget", "description": "prompt stated 50 cents per invoice", "max_cost": 0.50 }
+      ],
+      "human_task_outcomes": {}
+    }
+  ],
+  "mocks": [
+    { "host": "api.payments.internal", "path": "/charge", "method": "POST",
+      "status": 200, "response": { "transaction_id": "txn_9001", "state": "captured" }, "latency_ms": 120 },
+    { "host": "api.mail.internal", "path": "/send", "method": "POST",
+      "status": 200, "response": { "message_id": "msg_4410" }, "latency_ms": 40 }
+  ]
+}

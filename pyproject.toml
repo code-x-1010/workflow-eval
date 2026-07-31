@@ -1,0 +1,31 @@
+[project]
+name = "workflow-eval"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115", "uvicorn[standard]>=0.32", "pydantic>=2.9",
+  "httpx>=0.27", "lxml>=5.3", "xmlschema>=3.4", "networkx>=3.4",
+  "pyyaml>=6.0", "jinja2>=3.1", "arq>=0.26", "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+validation = ["pm4py>=2.7", "SpiffWorkflow>=3.0", "lark>=1.2"]
+intent     = ["hypothesis>=6.115"]
+sandbox    = ["SpiffWorkflow>=3.0"]
+cost       = ["tiktoken>=0.8"]
+dev        = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7",
+              "mypy>=1.13", "import-linter>=2.1", "schemathesis>=3.38"]
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

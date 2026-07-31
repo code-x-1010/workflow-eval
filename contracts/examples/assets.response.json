@@ -1,0 +1,8 @@
+{
+  "folder": "sandbox-eval",
+  "assets": [
+    { "name": "ExtractInvoiceFields", "type": "agent",   "deployed": true },
+    { "name": "ChargePayment",        "type": "process", "deployed": true },
+    { "name": "NotifyVendor",         "type": "process", "deployed": true }
+  ]
+}

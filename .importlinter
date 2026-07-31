@@ -1,0 +1,21 @@
+[importlinter]
+root_packages = wfeval
+include_external_packages = True
+
+[importlinter:contract:1]
+name = Core depends on nothing
+type = forbidden
+source_modules = wfeval.core
+forbidden_modules = wfeval.adapters
+
+# THE ANTI-CIRCULARITY GUARANTEE.
+# Test generation must never see the generated artifact, or it will generate
+# tests the artifact passes and the execution tier becomes a tautology.
+# See docs/agents/P2-intent-testgen.md.
+[importlinter:contract:2]
+name = Testgen may not see the workflow
+type = forbidden
+source_modules = intent.testgen
+forbidden_modules =
+    wfeval.core.ast
+    wfeval.adapters

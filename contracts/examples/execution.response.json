@@ -1,0 +1,39 @@
+{
+  "_note": "P3 -> P4 handshake. The `actuals` blocks are what Cost calibration consumes. P3: populate these from day one -- P4 cannot fabricate them.",
+  "gates": { "platform_acceptance": true },
+  "scores": { "execution_pass_rate": 0.80, "robustness": null },
+  "results": [
+    { "case_id": "tc_001", "status": "pass", "failed_assertion": null,
+      "expected_path": ["StartEvent_invoice", "Task_extract", "Gateway_amount", "Task_autopay", "Task_notify", "EndEvent_done"],
+      "actual_path": ["StartEvent_invoice", "Task_extract", "Gateway_amount", "Task_autopay", "Task_notify", "EndEvent_done"] },
+    { "case_id": "tc_002", "status": "fail",
+      "failed_assertion": "10000 is NOT over 10000 -> auto-pay",
+      "expected_path": ["Gateway_amount", "Task_autopay"],
+      "actual_path": ["Gateway_amount", "Task_approval"] }
+  ],
+  "traces": [
+    {
+      "case_id": "tc_001", "instance_id": "inst_7f3a91", "status": "completed",
+      "path": ["StartEvent_invoice", "Task_extract", "Gateway_amount", "Task_autopay", "Task_notify", "EndEvent_done"],
+      "events": [
+        { "element_id": "Task_extract", "started_at": "2026-07-30T09:14:02Z", "ended_at": "2026-07-30T09:14:10Z",
+          "outcome": "completed",
+          "actuals": { "llm_input_tokens": 4210, "llm_output_tokens": 380, "agent_turns": 4,
+                       "duration_ms": 8120, "robot_minutes": null, "human_minutes": null } },
+        { "element_id": "Task_autopay", "started_at": "2026-07-30T09:14:10Z", "ended_at": "2026-07-30T09:14:13Z",
+          "outcome": "completed",
+          "actuals": { "llm_input_tokens": null, "llm_output_tokens": null, "agent_turns": null,
+                       "duration_ms": 3010, "robot_minutes": 0.05, "human_minutes": null } }
+      ],
+      "final_variables": { "status": "SETTLED", "transaction_id": "txn_9001" },
+      "totals": { "llm_input_tokens": 4210, "llm_output_tokens": 380, "agent_turns": 4,
+                  "duration_ms": 11130, "robot_minutes": 0.05, "human_minutes": 0.0 }
+    }
+  ],
+  "diagnostics": [
+    { "code": "EXE-WRONG-BRANCH", "severity": "error",
+      "message": "Case tc_002: amount exactly 10000 traversed Task_approval; 'over 10000' should exclude the boundary.",
+      "suggested_fix": "Change the condition on Flow_3 from amount >= 10000 to amount > 10000.",
+      "element_id": "Gateway_amount", "locator": "/definitions/process/exclusiveGateway[@id='Gateway_amount']" }
+  ]
+}

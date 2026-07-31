@@ -1,0 +1,17 @@
+{
+  "gates": { "schema_validity": true, "reference_integrity": true },
+  "scores": { "structural_soundness": 0.90 },
+  "diagnostics": [
+    {
+      "code": "STR-UNREACHABLE-TASK",
+      "severity": "warning",
+      "message": "Task 'Notify vendor' is reachable, but only via the approval branch when Gateway_amount defaults are unset.",
+      "suggested_fix": "Mark Flow_4 as the default flow on Gateway_amount.",
+      "element_id": "Task_notify",
+      "locator": "/definitions/process/serviceTask[@id='Task_notify']"
+    }
+  ],
+  "ast_digest": "sha256:3f9a1c...",
+  "tiers_run": ["L1", "L3"],
+  "tiers_skipped": { "L2": "asset registry unavailable", "L4": "not implemented until D6" }
+}

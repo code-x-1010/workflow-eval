@@ -1,0 +1,4 @@
+When an invoice arrives by email, extract the vendor, amount and line items.
+If the amount is over 10000 route it to a manager for approval; otherwise pay it
+automatically. Either way notify the vendor when it's settled. Roughly 10% of
+invoices need approval. Keep it under 50 cents per invoice.
