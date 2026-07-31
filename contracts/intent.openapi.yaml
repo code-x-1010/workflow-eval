@@ -1,0 +1,504 @@
+openapi: 3.1.0
+
+# Intent & Test Generation — P2. Port 8002.
+#
+# FROZEN AFTER D2. Changes need docs/decisions/NNNN-*.md, not a PR.
+# Charter: docs/agents/P2-intent-testgen.md
+# Schemas mirror packages/wfeval-core/src/wfeval/core/{ir,diagnostics,report,testcase}.py.
+# If those two ever disagree, the pydantic models win and this file is the bug.
+#
+# THE ANTI-CIRCULARITY RULE IS ENCODED IN THIS FILE.
+# TestCasesRequest has no `artifact` property and sets additionalProperties:false,
+# so an artifact cannot be smuggled in. Do not relax either. See the note on that
+# schema, .importlinter contract 2, and tests/contract/test_anti_circularity.py.
+
+info:
+  title: wfeval-intent
+  version: 0.1.0
+  description: |
+    Everything derived from the user's PROMPT. Two questions:
+    *did the generator build what was asked for?* (`/v1/intent`) and
+    *what would prove it works?* (`/v1/testcases`).
+
+    `spec` is optional on every endpoint. Supplied by the generation team, it is
+    used as-is and additionally diffed against P2's own extraction to report
+    spec drift; absent, P2 extracts its own. That optionality is deliberate — it
+    keeps the only external dependency off the project's critical path.
+
+servers:
+  - url: http://localhost:8002
+    description: local / docker-compose
+  - url: http://intent:8002
+    description: in-cluster service name used by the Gateway
+
+tags:
+  - name: spec
+    description: Structured extraction from the prompt.
+  - name: intent
+    description: Alignment of a generated artifact against the prompt.
+  - name: testgen
+    description: Test case generation. Never sees the artifact.
+  - name: ops
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness.
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, owner]
+                properties:
+                  status: { type: string, examples: [ok] }
+                  service: { type: string, examples: [intent] }
+                  owner: { type: string, examples: [P2] }
+
+  /v1/spec:
+    post:
+      tags: [spec]
+      summary: Extract a structured Spec from a natural-language prompt.
+      description: |
+        Deterministic-where-possible structured extraction, disk-cached by content
+        hash of the prompt: the same prompt twice costs zero LLM calls the second
+        time. Emits `SPEC-*` sufficiency diagnostics for what the prompt failed to
+        say — a missing trigger, undefined error behaviour, an ambiguous condition.
+        A sufficiency diagnostic is a statement about the *prompt*, never about a
+        generated artifact.
+      operationId: extractSpec
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpecRequest" }
+      responses:
+        "200":
+          description: Extracted spec plus sufficiency diagnostics.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpecResponse" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/intent:
+    post:
+      tags: [intent]
+      summary: Score a generated artifact against what the user asked for.
+      description: |
+        Structured first, judge second. The deterministic `Spec` <-> AST coverage
+        diff (missing steps, extra side effects, order violations) produces the
+        `INT-*` diagnostics and most of the score; an LLM judge runs only on the
+        residue that genuinely cannot be checked structurally.
+
+        This is the one P2 endpoint that receives the artifact. It lives in
+        `align.py`, outside `testgen/`, and that separation is the whole
+        anti-circularity guarantee — see `/v1/testcases`.
+      operationId: scoreIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IntentRequest" }
+      responses:
+        "200":
+          description: Intent report. Carries `judge_agreement` whenever it carries a score.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IntentReport" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/testcases:
+    post:
+      tags: [testgen]
+      summary: Generate test cases from the prompt alone.
+      description: |
+        **This endpoint has no `artifact` field and never will.** Tests derived
+        from the generated workflow are tests the workflow passes, which would
+        make the entire execution tier a tautology reporting 100%.
+
+        Consumed by P3 (Sandbox). Assertions are semantic wherever possible
+        ("must traverse the approval branch") rather than bound to element ids,
+        so they survive the generator restructuring its ids; P3's trace matcher
+        resolves them against real ids at execution time.
+      operationId: generateTestCases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TestCasesRequest" }
+      responses:
+        "200":
+          description: Test cases plus the mocks needed to run them.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestCasesResponse" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+components:
+  responses:
+    ValidationError:
+      description: Request body failed schema validation.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: array
+                items: { type: object }
+
+  schemas:
+
+    # ---------- requests ----------
+
+    SpecRequest:
+      type: object
+      additionalProperties: false
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          description: The user's natural-language request, verbatim.
+        platform:
+          type: string
+          enum: [uipath_maestro, n8n]
+          default: uipath_maestro
+          description: n8n is deferred to v1.1; accepted so callers need not change later.
+
+    IntentRequest:
+      type: object
+      additionalProperties: false
+      required: [prompt, artifact]
+      properties:
+        prompt: { type: string, minLength: 1 }
+        artifact:
+          type: string
+          description: BPMN 2.0 XML (or DMN) as produced by the generator.
+        spec:
+          oneOf:
+            - $ref: "#/components/schemas/Spec"
+            - type: "null"
+          description: |
+            Upstream spec, if the generation team has one. When present it is
+            scored against *and* diffed against P2's own extraction; the drift
+            surfaces as an `INT-SPEC-DRIFT` diagnostic. When absent, P2 extracts.
+
+    TestCasesRequest:
+      type: object
+      additionalProperties: false      # <- load-bearing: blocks `artifact` smuggling
+      required: [prompt]
+      properties:
+        prompt: { type: string, minLength: 1 }
+        spec:
+          oneOf:
+            - $ref: "#/components/schemas/Spec"
+            - type: "null"
+          description: Skips re-extraction. Must itself have been built from the prompt.
+        kinds:
+          type: array
+          description: Which case kinds to generate. Omitted means all three.
+          default: [happy, boundary, adversarial]
+          items: { $ref: "#/components/schemas/CaseKind" }
+          uniqueItems: true
+          minItems: 1
+      # There is deliberately no `artifact` property here, and additionalProperties
+      # is false so one cannot be added by a caller. Adding it would let testgen see
+      # the workflow it is meant to be testing.
+
+    # ---------- responses ----------
+
+    SpecResponse:
+      type: object
+      required: [spec, sufficiency_diagnostics]
+      properties:
+        spec: { $ref: "#/components/schemas/Spec" }
+        sufficiency_diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/SpecDiagnostic" }
+
+    IntentReport:
+      type: object
+      required: [scores, diagnostics, judge_agreement, spec_source]
+      properties:
+        scores:
+          type: object
+          description: Currently `intent_coverage` in 0..1. null for a tier not yet implemented.
+          additionalProperties:
+            oneOf:
+              - { type: number, minimum: 0, maximum: 1 }
+              - { type: "null" }
+        diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/IntentDiagnostic" }
+        judge_agreement:
+          oneOf:
+            - { type: number, minimum: 0, maximum: 1 }
+            - { type: "null" }
+          description: |
+            Judge/human agreement on the calibration set in `datasets/golden/`.
+            HOUSE RULE: never ship a number without its confidence. `null` is
+            permitted only when no score is being reported — see the `if/then`
+            below, which makes that machine-checkable. Below ~0.8, say so loudly
+            rather than shipping a confident-looking number.
+        spec_source:
+          type: string
+          enum: [extracted, upstream, merged]
+          default: extracted
+      # A score never ships without its agreement rate.
+      if:
+        required: [scores]
+        properties:
+          scores: { minProperties: 1 }
+      then:
+        properties:
+          judge_agreement: { type: number }
+          # i.e. not null
+
+    TestCasesResponse:
+      type: object
+      required: [test_cases, mocks]
+      properties:
+        test_cases:
+          type: array
+          items: { $ref: "#/components/schemas/TestCase" }
+        mocks:
+          type: array
+          description: HTTP mocks for the whole suite, one per external integration in the spec.
+          items: { $ref: "#/components/schemas/MockDefinition" }
+        _note:
+          type: string
+          description: Present only in the committed golden example, never in a real response.
+
+    # ---------- Spec (mirrors wfeval.core.ir) ----------
+
+    Spec:
+      type: object
+      description: What the user asked for. Built from the prompt ONLY — never by reading an artifact.
+      required: [steps, inputs, outputs, branches, integrations, source]
+      properties:
+        trigger:
+          oneOf: [{ type: string }, { type: "null" }]
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/Step" }
+        inputs:
+          type: array
+          items: { $ref: "#/components/schemas/DataField" }
+        outputs:
+          type: array
+          items: { $ref: "#/components/schemas/DataField" }
+        branches:
+          type: array
+          items: { $ref: "#/components/schemas/BranchCondition" }
+        error_behaviour:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: null means the prompt never said — expect SPEC-NO-ERROR-BEHAVIOUR.
+        integrations:
+          type: array
+          items: { type: string }
+        budget_per_instance:
+          oneOf: [{ type: number, minimum: 0 }, { type: "null" }]
+          description: If stated in the prompt, P4 gates on it.
+        source:
+          type: string
+          enum: [extracted, upstream, merged]
+          default: extracted
+
+    Step:
+      type: object
+      required: [id, description]
+      properties:
+        id: { type: string, examples: [s1] }
+        description: { type: string }
+        kind_hint:
+          oneOf:
+            - { type: string, enum: [agent, service, user, decision] }
+            - { type: "null" }
+          description: What the user implied, not what the generator built.
+        depends_on:
+          type: array
+          items: { type: string }
+          default: []
+        is_deterministic:
+          type: boolean
+          default: false
+          description: true -> a DMN table beats an agent. Feeds P4's cost advice.
+        side_effecting: { type: boolean, default: false }
+
+    DataField:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string, examples: [decimal, string, array] }
+        required: { type: boolean, default: true }
+        bound:
+          oneOf: [{ type: integer, minimum: 0 }, { type: "null" }]
+          description: Volume hint, e.g. max line items. Feeds P4's cost free variables.
+
+    BranchCondition:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string }
+        expression_hint:
+          oneOf: [{ type: string }, { type: "null" }]
+          examples: ["amount > 10000"]
+        probability_hint:
+          oneOf: [{ type: number, minimum: 0, maximum: 1 }, { type: "null" }]
+          description: From the prompt, e.g. "about 10% need approval".
+
+    # ---------- TestCase (mirrors wfeval.core.testcase — P2 -> P3 CROSS-TEAM CONTRACT) ----------
+    # Changes here need a decision record signed off by BOTH P2 and P3.
+    # See docs/decisions/0003-taskstub-contract.md and 0005-testcase-contract-signoff.md.
+
+    CaseKind:
+      type: string
+      enum: [happy, boundary, adversarial]
+
+    TestCase:
+      type: object
+      additionalProperties: false      # <- keeps `artifact` out of individual cases too
+      required: [case_id, kind, description, input, assertions]
+      properties:
+        case_id: { type: string, examples: [tc_001] }
+        kind: { $ref: "#/components/schemas/CaseKind" }
+        description: { type: string }
+        input:
+          type: object
+          additionalProperties: true
+          description: Process variables seeded at instance start.
+        assertions:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/Assertion" }
+        human_task_outcomes:
+          type: object
+          additionalProperties: { type: string }
+          default: {}
+          description: element_id -> outcome, so Sandbox resolves human tasks deterministically.
+        task_stubs:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/TaskStub" }
+
+    Assertion:
+      type: object
+      required: [type, description]
+      properties:
+        type:
+          type: string
+          enum: [path, output, invariant, budget]
+        description:
+          type: string
+          description: |
+            Where an assertion had to name element ids, say so here so P3 can
+            resolve fuzzily. Semantic phrasing survives the generator renaming ids.
+        must_traverse:
+          oneOf: [{ type: array, items: { type: string } }, { type: "null" }]
+        must_not_traverse:
+          oneOf: [{ type: array, items: { type: string } }, { type: "null" }]
+        field:
+          oneOf: [{ type: string }, { type: "null" }]
+        equals:
+          description: Any JSON value, including null. For type=output.
+        expr:
+          oneOf: [{ type: string }, { type: "null" }]
+          examples: ["terminal_events == 1"]
+        max_cost:
+          oneOf: [{ type: number, minimum: 0 }, { type: "null" }]
+
+    MockDefinition:
+      type: object
+      required: [host, path]
+      description: |
+        A real outbound HTTP call to intercept (WireMock-seeded). Only meaningful
+        for a runner that actually makes network calls — today that is the deferred
+        UiPath runner. Spiff never touches the network and ignores this list;
+        TaskStub is what Spiff consumes instead.
+      properties:
+        host: { type: string, examples: [api.payments.internal] }
+        path: { type: string, examples: [/charge] }
+        method: { type: string, default: POST }
+        status: { type: integer, default: 200 }
+        response:
+          type: object
+          additionalProperties: true
+          default: {}
+        latency_ms: { type: integer, minimum: 0, default: 0 }
+
+    TaskStub:
+      type: object
+      description: |
+        Canned output for one non-HTTP task invocation (agent or service task).
+        `outputs[i]` is returned on the i-th invocation within a single case's
+        instance; the counter resets per case and the last entry repeats if the
+        task runs more times than there are outputs.
+
+        Keyed by `asset_ref` or `element_id`. **P2's generator emits `asset_ref`
+        only** — element ids exist solely in the artifact, which testgen never
+        sees. `element_id` is retained for hand-written fixtures and for P3-side
+        resolution. See docs/decisions/0005-testcase-contract-signoff.md.
+      properties:
+        element_id:
+          oneOf: [{ type: string }, { type: "null" }]
+        asset_ref:
+          oneOf: [{ type: string }, { type: "null" }]
+        outputs:
+          type: array
+          default: []
+          items:
+            type: object
+            additionalProperties: true
+      anyOf:
+        - required: [element_id]
+        - required: [asset_ref]
+
+    # ---------- Diagnostics (mirrors wfeval.core.diagnostics) ----------
+
+    Diagnostic:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code:
+          type: string
+          description: PREFIX-CATEGORY-DETAIL. Append-only, prefix-owned (PREFIX_OWNER in diagnostics.py).
+        severity:
+          type: string
+          enum: [error, warning, info]
+        message:
+          type: string
+          description: Human-readable and specific to this artifact.
+        suggested_fix:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: |
+            HOUSE RULE: an imperative the generator can act on — "Attach a boundary
+            error event to Task_autopay", not "the graph is invalid".
+        element_id:
+          oneOf: [{ type: string }, { type: "null" }]
+        locator:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: XPath (BPMN) or JSON pointer (n8n).
+
+    SpecDiagnostic:
+      allOf:
+        - $ref: "#/components/schemas/Diagnostic"
+        - type: object
+          properties:
+            code:
+              pattern: "^SPEC-[A-Z0-9-]+$"
+      description: P2 may only emit codes under its own prefixes. Enforced by tests/contract/test_code_ownership.py.
+
+    IntentDiagnostic:
+      allOf:
+        - $ref: "#/components/schemas/Diagnostic"
+        - type: object
+          properties:
+            code:
+              pattern: "^INT-[A-Z0-9-]+$"
+      description: P2 may only emit codes under its own prefixes.
