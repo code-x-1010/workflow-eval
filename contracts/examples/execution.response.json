@@ -1,7 +1,10 @@
 {
-  "_note": "P3 -> P4 handshake. The `actuals` blocks are what Cost calibration consumes. P3: populate these from day one -- P4 cannot fabricate them.",
+  "_note": "P3 -> P4 handshake. The `actuals` blocks are what Cost calibration consumes. P3: populate these from day one -- P4 cannot fabricate them. runner/fidelity/confidence added per docs/decisions/0002 and 0004: Spiff is the primary runner now (no UiPath tenant), so fidelity is 'reduced' and confidence is capped below 'high' -- enforced in code, see report.py's validator. robot_minutes/human_minutes are null throughout: Spiff never drives a real RPA robot or Action Center task, it resolves both via TaskStub/human_task_outcomes locally.",
   "gates": { "platform_acceptance": true },
   "scores": { "execution_pass_rate": 0.80, "robustness": null },
+  "confidence": "medium",
+  "runner": "spiff",
+  "fidelity": "reduced",
   "results": [
     { "case_id": "tc_001", "status": "pass", "failed_assertion": null,
       "expected_path": ["StartEvent_invoice", "Task_extract", "Gateway_amount", "Task_autopay", "Task_notify", "EndEvent_done"],
@@ -14,6 +17,7 @@
   "traces": [
     {
       "case_id": "tc_001", "instance_id": "inst_7f3a91", "status": "completed",
+      "runner": "spiff", "fidelity": "reduced",
       "path": ["StartEvent_invoice", "Task_extract", "Gateway_amount", "Task_autopay", "Task_notify", "EndEvent_done"],
       "events": [
         { "element_id": "Task_extract", "started_at": "2026-07-30T09:14:02Z", "ended_at": "2026-07-30T09:14:10Z",
@@ -23,17 +27,21 @@
         { "element_id": "Task_autopay", "started_at": "2026-07-30T09:14:10Z", "ended_at": "2026-07-30T09:14:13Z",
           "outcome": "completed",
           "actuals": { "llm_input_tokens": null, "llm_output_tokens": null, "agent_turns": null,
-                       "duration_ms": 3010, "robot_minutes": 0.05, "human_minutes": null } }
+                       "duration_ms": 3010, "robot_minutes": null, "human_minutes": null } }
       ],
       "final_variables": { "status": "SETTLED", "transaction_id": "txn_9001" },
       "totals": { "llm_input_tokens": 4210, "llm_output_tokens": 380, "agent_turns": 4,
-                  "duration_ms": 11130, "robot_minutes": 0.05, "human_minutes": 0.0 }
+                  "duration_ms": 11130, "robot_minutes": null, "human_minutes": 0.0 }
     }
   ],
   "diagnostics": [
     { "code": "EXE-WRONG-BRANCH", "severity": "error",
       "message": "Case tc_002: amount exactly 10000 traversed Task_approval; 'over 10000' should exclude the boundary.",
       "suggested_fix": "Change the condition on Flow_3 from amount >= 10000 to amount > 10000.",
-      "element_id": "Gateway_amount", "locator": "/definitions/process/exclusiveGateway[@id='Gateway_amount']" }
+      "element_id": "Gateway_amount", "locator": "/definitions/process/exclusiveGateway[@id='Gateway_amount']" },
+    { "code": "PLT-DEPLOY-DEFERRED", "severity": "info",
+      "message": "No UiPath sandbox tenant configured; deploy acceptance was not checked.",
+      "suggested_fix": "None required from the generator. This artifact has not been verified against the real uipath_maestro deploy path -- treat platform_acceptance as unverified, not confirmed, until it has.",
+      "element_id": null, "locator": null }
   ]
 }

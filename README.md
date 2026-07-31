@@ -9,9 +9,14 @@ A quality layer for LLM-generated workflows. Sits downstream of a workflow gener
 | Does it behave correctly when actually run? | **Sandbox Execution** | `:8003` | P3 |
 | What will it cost per run? | **Cost** | `:8004` | P4 |
 
-A thin **Gateway** (`:8000`) fans out to all four, short-circuits on failure, and returns one scored report. The generation team integrates against a single endpoint, or calls individual services directly.
+A thin **Gateway** (`:8000`) fans out to all four. It exposes two different things, not one:
 
-**Primary platform:** UiPath Maestro (BPMN 2.0 + DMN). n8n deferred to v1.1.
+- **`POST /v1/validate`** — sync, sub-2s. L1-L4 (Validation) + cost. **The blocking pre-deployment gate.** This is what the generation team calls before deploying to UiPath Maestro.
+- **`POST /v1/evaluations`** — async, minutes. L5 deploy + L6 execution (Sandbox) + intent alignment (Intent). A quality signal for generator improvement and regression tracking, **not** a per-artifact block.
+
+See `docs/decisions/0002-spiff-primary-runner.md` for why that split matters: Sandbox's own deploy targets its own sandbox, never the generation team's production Maestro — they deploy to production separately, after `/v1/validate` clears.
+
+**Primary platform:** UiPath Maestro (BPMN 2.0 + DMN). n8n deferred to v1.1. **Sandbox's test runner is Spiff** (local, free, seconds — no UiPath tenant exists), which is a different thing from the deploy target: artifacts are still authored for, and validated against, Maestro's BPMN/DMN dialect; Spiff just executes them in-process for testing. See `docs/agents/P3-sandbox.md`.
 
 ---
 
@@ -63,7 +68,7 @@ This is the most important date in the schedule. With four independently built s
 
 **Test cases derive from the prompt alone — never from the generated workflow.** If testgen reads the artifact, it produces tests the artifact passes and the whole execution tier becomes a tautology. Enforced three ways: `POST /v1/testcases` has no `artifact` field, `.importlinter` blocks `intent.testgen` from importing the AST, and `tests/contract/test_anti_circularity.py` asserts both are still in place.
 
-**Only the Sandbox service holds UiPath credentials.** The other three are pure functions over `(prompt, artifact)` and can run anywhere, including the generation team's own CI.
+**Only the Sandbox service holds UiPath credentials — when it holds any at all.** There is no UiPath sandbox tenant today, so Sandbox runs on Spiff (no credentials, no network dependency) with UiPath as a deferred runner behind the same interface. The other three services are pure functions over `(prompt, artifact)` and can run anywhere, including the generation team's own CI.
 
 ---
 
@@ -92,7 +97,7 @@ packages/
 services/
   validation/  :8001  P1   L1-L4 static ladder
   intent/      :8002  P2   spec extraction, alignment, test generation
-  sandbox/     :8003  P3   deploy + execute; the only UiPath credentials
+  sandbox/     :8003  P3   deploy + execute; Spiff primary runner, UiPath deferred
   cost/        :8004  P4   static cost analysis
   gateway/     :8000  P1   fan-out, short-circuit, aggregate (score.py/render.py: P4)
 
@@ -118,7 +123,7 @@ overall = 0 if any gate fails, else
     0.35 * structural_soundness  +  0.35 * intent_coverage  +  0.30 * execution_pass_rate
 ```
 
-Gates (binary): `schema_validity`, `reference_integrity`, `platform_acceptance`.
+Gates (binary): `schema_validity`, `reference_integrity`, `platform_acceptance`. `platform_acceptance` is currently deferred, not deleted — no UiPath tenant exists, so it always reads `true` (with a `PLT-DEPLOY-DEFERRED` info diagnostic) until Sandbox's UiPath runner is real. See `docs/decisions/0002-spiff-primary-runner.md`.
 
 **Cost is deliberately not in `overall`** — a cheap wrong workflow isn't better than an expensive correct one, and mixing them makes both numbers uninterpretable. Cost gates only when the prompt states a budget.
 
