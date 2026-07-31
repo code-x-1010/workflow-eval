@@ -19,14 +19,38 @@ from .report import (
     ValidationReport,
     Verdict,
 )
-from .testcase import Assertion, AssertionType, CaseKind, MockDefinition, TestCase
-from .trace import Actuals, ElementEvent, Trace
+from .testcase import Assertion, AssertionType, CaseKind, MockDefinition, TaskStub, TestCase
+from .trace import Actuals, ElementEvent, RunnerFidelity, Trace
 
 __all__ = [
-    "Actuals", "Assertion", "AssertionType", "BranchCondition", "CaseKind",
-    "Confidence", "CostReport", "DataField", "Diagnostic", "Element",
-    "ElementEvent", "ElementKind", "EvaluationReport", "ExecutionReport",
-    "ExecutionResult", "Flow", "IntentReport", "LoopSpec", "MockDefinition",
-    "PREFIX_OWNER", "Severity", "Spec", "Step", "TestCase", "Trace",
-    "ValidationReport", "Verdict", "WorkflowAST",
+    "PREFIX_OWNER",
+    "Actuals",
+    "Assertion",
+    "AssertionType",
+    "BranchCondition",
+    "CaseKind",
+    "Confidence",
+    "CostReport",
+    "DataField",
+    "Diagnostic",
+    "Element",
+    "ElementEvent",
+    "ElementKind",
+    "EvaluationReport",
+    "ExecutionReport",
+    "ExecutionResult",
+    "Flow",
+    "IntentReport",
+    "LoopSpec",
+    "MockDefinition",
+    "RunnerFidelity",
+    "Severity",
+    "Spec",
+    "Step",
+    "TaskStub",
+    "TestCase",
+    "Trace",
+    "ValidationReport",
+    "Verdict",
+    "WorkflowAST",
 ]

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Same story as contracts/examples/artifact.bpmn (invoice approval), but
+     actually executable on Spiff: Gateway_amount here has a default flow and
+     a real conditionExpression. The shared artifact.bpmn deliberately omits
+     both, which is the planted defect behind validation.response.json's
+     STR-UNREACHABLE-TASK diagnostic, so it fails to parse on ANY compliant
+     BPMN engine, not just Spiff (verified by hand: SpiffWorkflow.bpmn.parser
+     raises "Non-default exclusive outgoing sequence flow without condition"
+     on it as committed). In the real pipeline that is fine: Sandbox only
+     ever receives artifacts that already cleared the sync L1-L4 gate, which
+     would catch exactly this. This fixture is what a gate-cleared version
+     looks like, for testing the engine itself. See docs/decisions/0002. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs_invoice_executable" targetNamespace="http://uipath.com/maestro">
+  <process id="Process_invoice_approval" isExecutable="true">
+    <startEvent id="StartEvent_invoice" name="Invoice received"/>
+    <serviceTask id="Task_extract" name="Extract invoice fields"/>
+    <exclusiveGateway id="Gateway_amount" name="Amount over 10000?" default="Flow_4"/>
+    <userTask id="Task_approval" name="Manager approval"/>
+    <serviceTask id="Task_autopay" name="Auto-pay invoice"/>
+    <serviceTask id="Task_notify" name="Notify vendor"/>
+    <endEvent id="EndEvent_done" name="Invoice settled"/>
+    <sequenceFlow id="Flow_1" sourceRef="StartEvent_invoice" targetRef="Task_extract"/>
+    <sequenceFlow id="Flow_2" sourceRef="Task_extract" targetRef="Gateway_amount"/>
+    <sequenceFlow id="Flow_3" sourceRef="Gateway_amount" targetRef="Task_approval" name="over">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">amount &gt; 10000</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="Flow_4" sourceRef="Gateway_amount" targetRef="Task_autopay" name="under"/>
+    <sequenceFlow id="Flow_5" sourceRef="Task_approval" targetRef="Task_notify"/>
+    <sequenceFlow id="Flow_6" sourceRef="Task_autopay" targetRef="Task_notify"/>
+    <sequenceFlow id="Flow_7" sourceRef="Task_notify" targetRef="EndEvent_done"/>
+  </process>
+</definitions>

@@ -8,10 +8,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .diagnostics import Diagnostic
-from .trace import Trace
+from .trace import RunnerFidelity, Trace
 
 
 class Verdict(str, Enum):
@@ -61,10 +61,35 @@ class ExecutionResult(BaseModel):
 class ExecutionReport(BaseModel):
     """P3 -> Gateway"""
     gates: dict[str, bool] = Field(default_factory=dict)
-    scores: dict[str, float] = Field(default_factory=dict)
+    scores: dict[str, float | None] = Field(
+        default_factory=dict,
+        description="null for an unimplemented tier (e.g. 'robustness' before the stretch "
+        "goal lands) -- never a default number that looks like a measurement.",
+    )
+    confidence: Confidence = Field(
+        Confidence.MEDIUM,
+        description="Never 'high' when fidelity != 'production' -- a substitute engine "
+        "(Spiff) can't earn high confidence on its own, no matter how many cases pass.",
+    )
+    runner: str = Field(..., description="Execution engine used for this report, e.g. 'spiff' or 'uipath_maestro'.")
+    fidelity: RunnerFidelity = Field(
+        RunnerFidelity.REDUCED,
+        description="'production' only when `runner` is the actual target platform engine "
+        "(uipath_maestro). See docs/decisions/0002-spiff-primary-runner.md.",
+    )
     results: list[ExecutionResult] = Field(default_factory=list)
     traces: list[Trace] = Field(default_factory=list)
     diagnostics: list[Diagnostic] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _cap_confidence_on_reduced_fidelity(self) -> ExecutionReport:
+        if self.fidelity != RunnerFidelity.PRODUCTION and self.confidence == Confidence.HIGH:
+            raise ValueError(
+                "ExecutionReport.confidence cannot be 'high' when fidelity is not "
+                f"'production' (runner={self.runner!r}). A substitute engine cannot earn high "
+                "confidence regardless of pass rate."
+            )
+        return self
 
 
 class CostReport(BaseModel):

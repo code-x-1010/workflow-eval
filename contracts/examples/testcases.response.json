@@ -1,5 +1,5 @@
 {
-  "_note": "P2 -> P3 handshake. P3 builds their entire execution loop against this file from D3, six days before P2's generator works. Element ids match artifact.bpmn.",
+  "_note": "P2 -> P3 handshake. P3 builds their entire execution loop against this file from D3, six days before P2's generator works. Element ids match artifact.bpmn. task_stubs added by P3 per docs/decisions/0003-taskstub-contract.md -- pending P2 sign-off; P2 owns this file and should feel free to reshape the task_stubs entries once real testgen exists.",
   "test_cases": [
     {
       "case_id": "tc_001", "kind": "happy",
@@ -11,7 +11,12 @@
         { "type": "output", "description": "settles", "field": "status", "equals": "SETTLED" },
         { "type": "invariant", "description": "exactly one terminal event", "expr": "terminal_events == 1" }
       ],
-      "human_task_outcomes": {}
+      "human_task_outcomes": {},
+      "task_stubs": [
+        { "asset_ref": "ExtractInvoiceFields", "outputs": [{ "vendor": "Acme Ltd", "amount": 250.00 }] },
+        { "element_id": "Task_autopay", "outputs": [{ "status": "SETTLED", "transaction_id": "txn_9001" }] },
+        { "element_id": "Task_notify", "outputs": [{ "notified": true }] }
+      ]
     },
     {
       "case_id": "tc_002", "kind": "boundary",
@@ -21,7 +26,12 @@
         { "type": "path", "description": "10000 is NOT over 10000 -> auto-pay",
           "must_traverse": ["Task_autopay"], "must_not_traverse": ["Task_approval"] }
       ],
-      "human_task_outcomes": {}
+      "human_task_outcomes": {},
+      "task_stubs": [
+        { "asset_ref": "ExtractInvoiceFields", "outputs": [{ "vendor": "Acme Ltd", "amount": 10000.00 }] },
+        { "element_id": "Task_autopay", "outputs": [{ "status": "SETTLED", "transaction_id": "txn_9002" }] },
+        { "element_id": "Task_notify", "outputs": [{ "notified": true }] }
+      ]
     },
     {
       "case_id": "tc_003", "kind": "boundary",
@@ -31,7 +41,11 @@
         { "type": "path", "description": "must route to approval", "must_traverse": ["Task_approval"] },
         { "type": "output", "description": "pends approval", "field": "status", "equals": "PENDING_APPROVAL" }
       ],
-      "human_task_outcomes": { "Task_approval": "approved" }
+      "human_task_outcomes": { "Task_approval": "approved" },
+      "task_stubs": [
+        { "asset_ref": "ExtractInvoiceFields", "outputs": [{ "vendor": "Acme Ltd", "amount": 10000.01 }] },
+        { "element_id": "Task_notify", "outputs": [{ "notified": true }] }
+      ]
     },
     {
       "case_id": "tc_004", "kind": "adversarial",
