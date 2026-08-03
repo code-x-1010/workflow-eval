@@ -1,0 +1,1 @@
+When a carrier reports a delivery exception, try to re-book the delivery automatically. Give it up to three attempts — after each failed attempt wait and try again. If it still has not worked after the third attempt, hand it to a logistics coordinator to sort out manually. Update the customer either way.

@@ -1,0 +1,1 @@
+When a counterparty returns a contract, extract the changed clauses and have counsel review them. If counsel raises redlines, send them back to the counterparty and wait for the next version — that cycle repeats until counsel is satisfied. Once there are no redlines, route the contract for signature and file the executed copy.

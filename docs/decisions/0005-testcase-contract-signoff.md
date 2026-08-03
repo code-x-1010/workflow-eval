@@ -62,6 +62,12 @@ branches and steps, not ids.
 
 ### 4. Add `path_match` to `Assertion` (the only type change requested)
 
+> **Superseded by `0009` (2026-08-03).** `human_task_outcomes` turned out to have
+> the same element-id problem, and one field on `TestCase` covers both cases more
+> simply than a per-assertion field covers one. Read `0009` before actioning this
+> section. Everything below still describes the reasoning; only the field's name
+> and location changed.
+
 ```python
 class PathMatch(str, Enum):
     EXACT = "exact"        # strings are BPMN element ids, compare literally

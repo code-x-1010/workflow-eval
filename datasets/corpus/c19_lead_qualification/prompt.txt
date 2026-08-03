@@ -1,0 +1,1 @@
+An inbound lead fills in the web form. Enrich the record from our data provider, then score the lead for fit out of 100. Leads scoring 60 or more are assigned to an account executive and get a meeting invite. Leads below 60 go into the nurture sequence. If enrichment finds the company is an existing customer, route it to the account manager instead of treating it as new business.

@@ -1,11 +1,20 @@
 {
-  "scores": { "intent_coverage": 0.75 },
+  "_note": "P2 -> P1 (Gateway aggregation). Every diagnostic here is a finding that is actually true of contracts/examples/artifact.bpmn read against contracts/examples/prompt.txt and spec.response.json -- checked element by element, not illustrative. All four spec steps (s1 extract, s2 route, s3 auto-pay, s4 notify) ARE present in the artifact, so step coverage is 1.0; intent_coverage is below 1.0 because two things the prompt asked for are not expressed anywhere in it. INT-* codes are P2's prefix; the registry lands at D6 with the deterministic differ, the same way SPEC-* landed at D2 in docs/decisions/0008. Note both diagnostics are 'warning' even though the first one describes a genuinely broken gateway: diagnostics.py defines 'error' as 'blocks a gate, or fails a test case', and IntentReport has no gates field, so no INT-* code can block anything. INT severity therefore tops out at warning by construction -- a finding this serious surfacing as a warning is a limitation worth knowing about when P1 aggregates.",
+  "scores": { "intent_coverage": 0.72 },
   "diagnostics": [
+    {
+      "code": "INT-CONDITION-NOT-EXPRESSED",
+      "severity": "warning",
+      "message": "The prompt's branch condition 'amount over 10000' is not expressed in the artifact. Gateway_amount's outgoing flows are labelled 'over' and 'under' but neither carries a conditionExpression and neither is marked default, so the threshold exists only as a name and the gateway cannot route on it.",
+      "suggested_fix": "Add conditionExpression 'amount > 10000' to Flow_3 and mark Flow_4 as Gateway_amount's default flow.",
+      "element_id": "Gateway_amount",
+      "locator": "/definitions/process/exclusiveGateway[@id='Gateway_amount']"
+    },
     {
       "code": "INT-NO-ERROR-HANDLING",
       "severity": "warning",
-      "message": "Spec step s3 (auto-pay) is side-effecting but Task_autopay has no boundary error event.",
-      "suggested_fix": "Attach a boundary error event to Task_autopay routing to an escalation path.",
+      "message": "Spec step s3 (auto-pay) is side-effecting but Task_autopay has no boundary error event. The prompt does not say what should happen when the payments API fails, so this is a gap in the prompt as much as in the artifact -- see SPEC-NO-ERROR-BEHAVIOUR on the same pair.",
+      "suggested_fix": "Attach a boundary error event to Task_autopay routing to an escalation path, once the user has said whether a failed payment should retry, escalate or park the invoice.",
       "element_id": "Task_autopay",
       "locator": "/definitions/process/serviceTask[@id='Task_autopay']"
     }

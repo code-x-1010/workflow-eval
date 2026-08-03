@@ -1,0 +1,1 @@
+Two days before a patient's appointment, text them a reminder and ask them to confirm. If they confirm, mark the appointment confirmed and stop there. If they cancel, release the slot and offer it to the waiting list. If they do not reply at all by the next morning, a receptionist rings them.

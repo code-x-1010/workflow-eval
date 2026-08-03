@@ -1,0 +1,1 @@
+Every night at 2am, go through the catalogue — around 2000 SKUs — and check each one's stock level against its reorder point. Where stock has fallen below the reorder point, raise a replenishment order with the preferred supplier. At the end send the warehouse manager a summary of everything that was ordered. The whole run has to cost us no more than 20 dollars.
