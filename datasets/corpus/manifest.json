@@ -413,7 +413,7 @@
       "expected_diagnostics": [
         "SPEC-NO-BUDGET"
       ],
-      "notes": "'a fixed table, not a judgement call' is the deterministic hint \u2014 a DMN task, not an agent."
+      "notes": "'a fixed table, not a judgement call' is the deterministic hint - a DMN task, not an agent. This is the one case in the corpus base SpiffWorkflow cannot parse: it has no parser for businessRuleTask, so P3's runner reports EXE-RUNNER-UNSUPPORTED here. That is a runner limitation, not an artifact defect - businessRuleTask is the correct BPMN element for a decision table, and swapping it for a serviceTask to please the runner would delete the deterministic signal this case exists to test."
     },
     {
       "id": "c16_insurance_claim",

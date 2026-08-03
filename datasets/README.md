@@ -36,6 +36,28 @@ fails it today (`Gateway_amount`'s flows have neither), which is why P3 could no
 run the shared fixture through Spiff. That defect is deliberate there. It must
 not be accidental here.
 
+`pytest datasets` runs the emitter and validator tests. They matter more than
+they look: `--check` passing on 40 authored inputs says nothing about whether
+the checker *catches* anything, so `tools/test_bpmn.py` feeds it known-bad
+artifacts (dangling flow ref, duplicate id, unreachable element, unconditioned
+non-default split, two start events) and asserts it complains about each. They
+live under `datasets/` rather than `tests/unit/` because that is P2's lane, so
+`make test` does not pick them up — see `docs/decisions/0006`.
+
+## Does the corpus actually execute?
+
+Verified 2026-08-03 against `SpiffWorkflow==3.1.2`: **39 of the 40 parse**. The
+exception is `c15_loan_application`, which uses a `businessRuleTask` that base
+Spiff has no parser for, so P3's runner reports `EXE-RUNNER-UNSUPPORTED` on it.
+
+That is a runner limitation, not an artifact defect, and the case stays as it
+is. `businessRuleTask` is the correct BPMN element for "a fixed table, not a
+judgement call", and swapping it for a `serviceTask` to please the runner would
+delete the deterministic-vs-agent signal the case exists to test. Parsing is
+also not what these artifacts are *for* — they are ground truth for intent
+alignment, not fixtures for the execution tier. It is recorded because P3 should
+see 39/40 coming rather than discover it mid-run.
+
 ## The two halves, and why the corpus is useless without both
 
 | Provenance | n | Reference is | Prompt is |
