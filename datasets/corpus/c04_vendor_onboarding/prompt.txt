@@ -1,0 +1,1 @@
+A new vendor submits their onboarding form. Run a credit check and a sanctions screening at the same time, since neither depends on the other and we do not want to wait twice. When both come back, a procurement officer reviews the combined result and either approves the vendor, in which case create them in the ERP and email them their supplier code, or rejects them with a reason.

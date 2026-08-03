@@ -1,0 +1,1 @@
+When an order is placed, reserve stock for each line item in turn — an order can have up to 100 lines. Once everything is reserved, print the picking list and book the courier at the same time. Orders over 500 ship insured, everything else ships standard. Send the customer a dispatch confirmation with the tracking number.

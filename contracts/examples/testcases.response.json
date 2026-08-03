@@ -1,5 +1,5 @@
 {
-  "_note": "P2 -> P3 handshake. P3 builds their entire execution loop against this file from D3, six days before P2's generator works. Element ids match artifact.bpmn. task_stubs added by P3 per docs/decisions/0003-taskstub-contract.md -- pending P2 sign-off; P2 owns this file and should feel free to reshape the task_stubs entries once real testgen exists.",
+  "_note": "P2 -> P3 handshake. P3 builds their entire execution loop against this file from D3, six days before P2's generator works. task_stubs were added by P3 per docs/decisions/0003-taskstub-contract.md and are SIGNED OFF by P2 as of 0005 -- the shape is right and P2 will emit it unchanged. What is NOT right is the keying: tc_001..tc_005 name element ids (Task_autopay, Gateway_amount, Task_approval) that exist only in artifact.bpmn, and P2's testgen never sees an artifact. They are hand-written fixtures, correct as such, but they are not the shape P2 emits at D8. tc_006 is: asset_ref-keyed stubs, no element id anywhere. Build the resolver against tc_006, not against tc_001. See docs/decisions/0005 and 0009.",
   "test_cases": [
     {
       "case_id": "tc_001", "kind": "happy",
@@ -64,6 +64,23 @@
         { "type": "budget", "description": "prompt stated 50 cents per invoice", "max_cost": 0.50 }
       ],
       "human_task_outcomes": {}
+    },
+    {
+      "case_id": "tc_006", "kind": "happy",
+      "description": "SHAPE PREVIEW -- this is what POST /v1/testcases actually emits from D8: every stub keyed by asset_ref, derived from the spec's integrations, and not one element id in the case. tc_001..tc_005 above are hand-written from artifact.bpmn and P2 cannot produce them. A resolver that works on tc_001 but not on this case will break the day real testgen lands.",
+      "input": { "vendor": "Northwind Traders", "amount": 4200.00, "line_items": [{ "sku": "NW-7", "qty": 3 }] },
+      "assertions": [
+        { "type": "output", "description": "invoice reaches a settled state", "field": "status", "equals": "SETTLED" },
+        { "type": "invariant", "description": "exactly one terminal event", "expr": "terminal_events == 1" },
+        { "type": "invariant", "description": "the payment task runs at most once -- no double charge", "expr": "task_executions['AutoPayInvoice'] <= 1" },
+        { "type": "budget", "description": "prompt stated 50 cents per invoice", "max_cost": 0.50 }
+      ],
+      "human_task_outcomes": {},
+      "task_stubs": [
+        { "asset_ref": "ExtractInvoiceFields", "outputs": [{ "vendor": "Northwind Traders", "amount": 4200.00, "line_items": [{ "sku": "NW-7", "qty": 3 }] }] },
+        { "asset_ref": "AutoPayInvoice", "outputs": [{ "status": "SETTLED", "transaction_id": "txn_9006" }] },
+        { "asset_ref": "NotifyVendor", "outputs": [{ "notified": true, "channel": "email" }] }
+      ]
     }
   ],
   "mocks": [

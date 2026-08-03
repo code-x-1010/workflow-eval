@@ -1,0 +1,1 @@
+When a lab result arrives, match it to the patient record. If the result is flagged critical, page the on-call clinician immediately and keep paging until someone acknowledges — nothing else happens for that result until then. Normal results are filed to the record and the patient is notified through the portal. Every result is written to the audit log whatever happens to it.

@@ -1,0 +1,1 @@
+When a purchase order is raised, look up the vendor's risk rating. Orders of 50000 or more always need a procurement review, and if the vendor is also rated high risk they need a compliance sign-off on top of that. Orders under 50000 from low risk vendors are approved automatically. Send the approved order to the vendor and record it in the ledger.

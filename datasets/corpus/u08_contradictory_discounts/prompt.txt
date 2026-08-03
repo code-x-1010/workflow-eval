@@ -1,0 +1,1 @@
+Approve all discounts automatically so deals don't get held up. Every discount over 10% has to be signed off by the sales manager.

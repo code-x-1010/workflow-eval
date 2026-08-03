@@ -1,0 +1,1 @@
+A new customer signs up. Verify their identity document, then screen them against the PEP and sanctions lists and produce a risk band. Low risk customers are approved and their account is opened immediately. Medium risk goes to a compliance analyst for review. High risk is refused outright and the case is reported to the MLRO — nothing else should run after that.

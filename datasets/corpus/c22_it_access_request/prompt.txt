@@ -1,0 +1,1 @@
+An employee requests access to a system. If the role they are asking for is privileged, both their line manager and the system owner have to approve, and those approvals can happen in either order. Standard access only needs the line manager. Once approved, grant the entitlement and log it in the access register for audit.

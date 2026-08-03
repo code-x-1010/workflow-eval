@@ -1,0 +1,1 @@
+Incoming support tickets are classified by severity. P1 tickets page the on-call engineer and open an incident channel at the same time. P2 tickets are assigned to the duty queue. P3 and below are acknowledged with an email and left in the backlog. Every ticket gets a tracking record written before it is routed.

@@ -1,0 +1,1 @@
+When a sales rep requests an NDA, take the counterparty details from the request, generate the document from our standard template, store it in the document management system and email it to the counterparty for signature. There are no approvals in this one — the template is fixed and legal has pre-approved it.

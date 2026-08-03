@@ -1,0 +1,1 @@
+Thirty days before a subscription expires, check the account's usage and churn risk. High risk accounts go to a customer success manager to call. Everyone else gets an automatic renewal notice and we take payment on the renewal date. If the card is declined, retry once the next day and then, if it still fails, hand it to collections.

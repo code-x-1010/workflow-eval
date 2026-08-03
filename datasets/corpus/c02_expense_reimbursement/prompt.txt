@@ -1,0 +1,1 @@
+An employee submits an expense claim. Validate the receipts first. Claims under 100 are reimbursed straight away with no approval. Claims from 100 up to 1000 go to the employee's line manager. Anything above 1000 goes to the finance director. Once approved, raise the payment and email the employee a confirmation. Reject the claim outright if the receipts do not validate.

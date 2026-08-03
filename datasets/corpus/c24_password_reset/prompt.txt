@@ -1,0 +1,1 @@
+A user asks for a password reset. Send a one-time code to their registered phone and check what they type back. If the code is wrong, lock the request and tell them to contact the service desk — do not let them keep guessing. If it is right, reset the password, force a change at next logon, and email them to confirm.
