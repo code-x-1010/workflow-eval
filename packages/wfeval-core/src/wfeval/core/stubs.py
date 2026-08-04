@@ -31,4 +31,5 @@ def golden(name: str) -> dict[str, Any]:
             f"Missing golden example: {path}\n"
             f"The owning agent must commit this by D2 (see AGENTS.md section 4)."
         )
-    return json.loads(path.read_text())
+    data: dict[str, Any] = json.loads(path.read_text())
+    return data

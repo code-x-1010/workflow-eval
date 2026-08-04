@@ -70,7 +70,10 @@ should add it.
 
 ## Sign-off
 
-- [ ] P1 — the rename is yours; your record's content is not in dispute
+- [x] P1 — renamed `0008`→`0010`→`0012` (the `0010` rename was mine, from an
+      earlier collision with P2's already-merged `0008`/`0009`; hit yours
+      independently on this merge). Heading and `docs/handoff/P1.md` reference
+      updated.
 - [x] P2
 - [ ] P3 — awareness: check all branches before you claim a number
 - [ ] P4 — awareness

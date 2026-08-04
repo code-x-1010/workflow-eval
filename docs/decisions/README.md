@@ -12,6 +12,10 @@ the only channel for anything that affects a shared contract or another agent.
 **When NOT to write one:** anything entirely inside your own lane. Put that in your handoff file.
 
 Numbered sequentially. Never edit someone else's — append a superseding record instead.
+Before claiming `NNNN`, check the highest number across *all* branches, not just
+what you have checked out (`git fetch --all --prune`, then find the max prefix
+under `docs/decisions/` across every remote ref) — four agents on isolated
+branches can each see a different "next free" number otherwise (see 0011).
 
 ## Template
 

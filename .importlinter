@@ -1,5 +1,6 @@
 [importlinter]
-root_packages = wfeval
+root_packages =
+    wfeval
 include_external_packages = True
 
 [importlinter:contract:1]
@@ -12,10 +13,17 @@ forbidden_modules = wfeval.adapters
 # Test generation must never see the generated artifact, or it will generate
 # tests the artifact passes and the execution tier becomes a tautology.
 # See docs/agents/P2-intent-testgen.md.
-[importlinter:contract:2]
-name = Testgen may not see the workflow
-type = forbidden
-source_modules = intent.testgen
-forbidden_modules =
-    wfeval.core.ast
-    wfeval.adapters
+#
+# Disabled until P2 builds this module (charter D9, Week 2) -- import-linter
+# hard-fails ("Module ... does not exist") on a forbidden contract whose
+# source_modules isn't real yet, which broke lint-imports for everyone.
+# Also fixed the path: this repo imports services as `services.intent.src.*`,
+# not a bare `intent` package -- see decision 0013. P2, uncomment (with the
+# corrected path below) once `services/intent/src/testgen/` exists.
+# [importlinter:contract:2]
+# name = Testgen may not see the workflow
+# type = forbidden
+# source_modules = services.intent.src.testgen
+# forbidden_modules =
+#     wfeval.core.ast
+#     wfeval.adapters

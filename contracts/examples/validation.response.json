@@ -1,17 +1,24 @@
 {
-  "gates": { "schema_validity": true, "reference_integrity": true },
-  "scores": { "structural_soundness": 0.90 },
+  "gates": {
+    "schema_validity": true
+  },
+  "scores": {
+    "structural_soundness": 0.9786
+  },
   "diagnostics": [
     {
-      "code": "STR-UNREACHABLE-TASK",
+      "code": "STR-GATEWAY-NO-DEFAULT",
       "severity": "warning",
-      "message": "Task 'Notify vendor' is reachable, but only via the approval branch when Gateway_amount defaults are unset.",
-      "suggested_fix": "Mark Flow_4 as the default flow on Gateway_amount.",
-      "element_id": "Task_notify",
-      "locator": "/definitions/process/serviceTask[@id='Task_notify']"
+      "message": "Exclusive gateway 'Gateway_amount' has 2 outgoing flows; 2 have no condition and none is marked default. Runtime behaviour is undefined if no condition matches.",
+      "suggested_fix": "Mark one outgoing flow from 'Gateway_amount' as the default flow, or add a condition to every outgoing flow.",
+      "element_id": "Gateway_amount",
+      "locator": "/definitions/process/exclusiveGateway[@id='Gateway_amount']"
     }
   ],
-  "ast_digest": "sha256:3f9a1c...",
+  "ast_digest": "sha256:debed69e7be5f16857b8706a2b361fa7d783e4868e83021858d8ee4d7e74272c",
   "tiers_run": ["L1", "L3"],
-  "tiers_skipped": { "L2": "asset registry unavailable", "L4": "not implemented until D6" }
+  "tiers_skipped": {
+    "L2": "not implemented until D8 (needs Sandbox's asset registry)",
+    "L4": "not implemented until D6-D7 (soundness + dataflow)"
+  }
 }

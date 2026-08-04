@@ -1,0 +1,423 @@
+openapi: 3.1.0
+
+# Sandbox Execution — P3. Port 8003.
+#
+# FROZEN AFTER D2. Changes need docs/decisions/NNNN-*.md, not a PR.
+# Charter: docs/agents/P3-sandbox.md
+# Schemas mirror packages/wfeval-core/src/wfeval/core/{report,trace,testcase}.py.
+# If those two ever disagree, the pydantic models win and this file is the bug.
+#
+# Drafted by P1 to meet the "draft all 5 OpenAPI specs by D2" charter item, but
+# transcribed from P3's already-merged implementation
+# (services/sandbox/src/main.py, runners/) rather than invented -- P3 signs off
+# before this freezes. The only service holding UiPath credentials, when it
+# holds any at all; Spiff is the primary runner today (see
+# docs/decisions/0002-spiff-primary-runner.md), no network dependency, no
+# tenant required.
+
+info:
+  title: wfeval-sandbox
+  version: 0.1.0
+  description: |
+    Deploys (L5) and executes (L6) an artifact against generated test cases.
+    Spiff runs in-process in seconds; UiPath is a deferred runner behind the
+    same interface, for the day a sandbox tenant exists.
+
+servers:
+  - url: http://localhost:8003
+    description: local / docker-compose
+  - url: http://sandbox:8003
+    description: in-cluster service name used by the Gateway
+
+tags:
+  - name: deploy
+    description: L5 platform acceptance.
+  - name: executions
+    description: L6 execution against generated test cases.
+  - name: assets
+    description: Deployed asset registry, consumed by Validation's L2.
+  - name: ops
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness.
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, owner]
+                properties:
+                  status: { type: string, examples: [ok] }
+                  service: { type: string, examples: [sandbox] }
+                  owner: { type: string, examples: [P3] }
+
+  /v1/deploy:
+    post:
+      tags: [deploy]
+      summary: L5 platform acceptance — does this artifact actually deploy to Maestro?
+      description: |
+        DEFERRED, not deleted: no UiPath sandbox tenant exists yet, so this
+        always accepts and emits an info-level `PLT-DEPLOY-DEFERRED` diagnostic.
+        Spiff cannot substitute for this check -- it never talks to Maestro.
+        Real acceptance checking resumes the day the UiPath runner is real.
+      operationId: deploy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeployRequest" }
+      responses:
+        "200":
+          description: "Deploy result. Always `accepted: true` until a real tenant exists."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeployResponse" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/executions:
+    post:
+      tags: [executions]
+      summary: Run an artifact against a set of test cases.
+      description: |
+        Consumes P2's generated `test_cases` and `mocks` (or hand-written
+        fixtures with the same shape). Spiff executes seconds-fast in-process,
+        so this is kept 202-shaped for contract parity with the future UiPath
+        runner rather than out of real async necessity today.
+      operationId: startExecution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecutionRequest" }
+      responses:
+        "202":
+          description: Accepted. Poll `poll_url` for the result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecutionAccepted" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/executions/{execution_id}:
+    get:
+      tags: [executions]
+      summary: Poll for an execution's result.
+      operationId: getExecution
+      parameters:
+        - name: execution_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: |
+            Execution report. An unknown `execution_id` (including the
+            conventional `ex_stub_0001`) still returns 200 with the golden
+            example under `WFEVAL_STUB_DEPS=1` -- never a hang.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecutionReport" }
+
+  /v1/assets:
+    get:
+      tags: [assets]
+      summary: Deployed asset registry — consumed by Validation's L2 reference checks.
+      description: |
+        Validation must never hard-fail when this is unreachable; it degrades
+        L2 to `tiers_skipped` instead. See docs/agents/P1-validation.md.
+      operationId: listAssets
+      responses:
+        "200":
+          description: Assets in the sandbox folder.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetsResponse" }
+
+components:
+  responses:
+    ValidationError:
+      description: Request body failed schema validation.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: array
+                items: { type: object }
+
+  schemas:
+
+    # ---------- requests ----------
+
+    Artifact:
+      type: object
+      additionalProperties: false
+      required: [format, content]
+      properties:
+        format:
+          type: string
+          enum: [bpmn, dmn]
+        content:
+          type: string
+          description: Raw BPMN 2.0 or DMN 1.3 XML.
+
+    DeployRequest:
+      type: object
+      additionalProperties: false
+      required: [artifact]
+      properties:
+        artifact: { $ref: "#/components/schemas/Artifact" }
+        platform:
+          type: string
+          enum: [uipath_maestro, n8n]
+          default: uipath_maestro
+
+    ExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [artifact, test_cases]
+      properties:
+        artifact: { $ref: "#/components/schemas/Artifact" }
+        test_cases:
+          type: array
+          items: { $ref: "#/components/schemas/TestCase" }
+        mocks:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/MockDefinition" }
+        timeout_s:
+          type: integer
+          minimum: 1
+          default: 60
+
+    # ---------- responses ----------
+
+    DeployResponse:
+      type: object
+      required: [accepted, diagnostics]
+      properties:
+        accepted: { type: boolean }
+        diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/SandboxDiagnostic" }
+
+    ExecutionAccepted:
+      type: object
+      required: [execution_id, poll_url]
+      properties:
+        execution_id: { type: string, examples: [ex_7f3a91] }
+        poll_url: { type: string, examples: ["/v1/executions/ex_7f3a91"] }
+
+    AssetsResponse:
+      type: object
+      required: [folder, assets]
+      properties:
+        folder: { type: string }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/Asset" }
+
+    Asset:
+      type: object
+      required: [name, type, deployed]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [agent, process] }
+        deployed: { type: boolean }
+
+    RunnerFidelity:
+      type: string
+      enum: [production, reduced]
+      description: "'production' only when `runner` IS the target platform engine (uipath_maestro). Spiff is 'reduced' by construction."
+
+    Confidence:
+      type: string
+      enum: [low, medium, high]
+
+    ExecutionResult:
+      type: object
+      required: [case_id, status]
+      properties:
+        case_id: { type: string }
+        status: { type: string, enum: [pass, fail, error, skipped] }
+        failed_assertion: { oneOf: [{ type: string }, { type: "null" }] }
+        expected_path:
+          oneOf: [{ type: array, items: { type: string } }, { type: "null" }]
+        actual_path:
+          oneOf: [{ type: array, items: { type: string } }, { type: "null" }]
+
+    ExecutionReport:
+      type: object
+      required: [gates, scores, confidence, runner, fidelity, results, traces, diagnostics]
+      properties:
+        gates:
+          type: object
+          additionalProperties: { type: boolean }
+        scores:
+          type: object
+          description: e.g. `execution_pass_rate`. null for an unimplemented tier (e.g. `robustness`) -- never a default that looks like a measurement.
+          additionalProperties:
+            oneOf: [{ type: number, minimum: 0, maximum: 1 }, { type: "null" }]
+        confidence:
+          allOf: [{ $ref: "#/components/schemas/Confidence" }]
+          description: Never 'high' when fidelity != 'production' -- enforced in report.py.
+        runner: { type: string, examples: [spiff, uipath_maestro] }
+        fidelity: { $ref: "#/components/schemas/RunnerFidelity" }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ExecutionResult" }
+        traces:
+          type: array
+          items: { $ref: "#/components/schemas/Trace" }
+        diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/SandboxDiagnostic" }
+
+    # ---------- Trace (mirrors wfeval.core.trace — P3 -> P4 CROSS-TEAM CONTRACT) ----------
+    # Changes here need a decision record signed off by BOTH P3 and P4.
+
+    Actuals:
+      type: object
+      description: Observed cost inputs. Cheap to capture now, expensive to retrofit -- populate from day one even before Cost consumes them.
+      properties:
+        llm_input_tokens: { oneOf: [{ type: integer }, { type: "null" }] }
+        llm_output_tokens: { oneOf: [{ type: integer }, { type: "null" }] }
+        agent_turns: { oneOf: [{ type: integer }, { type: "null" }] }
+        duration_ms: { oneOf: [{ type: integer }, { type: "null" }] }
+        robot_minutes: { oneOf: [{ type: number }, { type: "null" }] }
+        human_minutes: { oneOf: [{ type: number }, { type: "null" }] }
+
+    ElementEvent:
+      type: object
+      required: [element_id, started_at]
+      properties:
+        element_id: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        outcome: { oneOf: [{ type: string }, { type: "null" }] }
+        actuals: { $ref: "#/components/schemas/Actuals" }
+
+    Trace:
+      type: object
+      required: [case_id, instance_id, status, runner, fidelity]
+      properties:
+        case_id: { type: string }
+        instance_id: { type: string }
+        status: { type: string, enum: [completed, faulted, timed_out, cancelled] }
+        runner: { type: string, examples: [spiff, uipath_maestro] }
+        fidelity: { $ref: "#/components/schemas/RunnerFidelity" }
+        path:
+          type: array
+          items: { type: string }
+          description: Ordered element ids actually traversed.
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/ElementEvent" }
+        final_variables:
+          type: object
+          additionalProperties: true
+        totals: { $ref: "#/components/schemas/Actuals" }
+
+    # ---------- TestCase (mirrors wfeval.core.testcase — P2 -> P3 CROSS-TEAM CONTRACT) ----------
+    # Same shape as contracts/intent.openapi.yaml's copy; see
+    # docs/decisions/0003-taskstub-contract.md and 0005-testcase-contract-signoff.md.
+
+    CaseKind:
+      type: string
+      enum: [happy, boundary, adversarial]
+
+    Assertion:
+      type: object
+      required: [type, description]
+      properties:
+        type: { type: string, enum: [path, output, invariant, budget] }
+        description: { type: string }
+        must_traverse: { oneOf: [{ type: array, items: { type: string } }, { type: "null" }] }
+        must_not_traverse: { oneOf: [{ type: array, items: { type: string } }, { type: "null" }] }
+        field: { oneOf: [{ type: string }, { type: "null" }] }
+        equals: { description: Any JSON value, including null. For type=output. }
+        expr: { oneOf: [{ type: string }, { type: "null" }], examples: ["terminal_events == 1"] }
+        max_cost: { oneOf: [{ type: number, minimum: 0 }, { type: "null" }] }
+
+    MockDefinition:
+      type: object
+      required: [host, path]
+      description: |
+        Real outbound HTTP call to intercept (WireMock-seeded). Only meaningful
+        for a runner that attempts network calls -- today, the deferred UiPath
+        runner. Spiff ignores this list; TaskStub is what it consumes instead.
+      properties:
+        host: { type: string, examples: [api.payments.internal] }
+        path: { type: string, examples: [/charge] }
+        method: { type: string, default: POST }
+        status: { type: integer, default: 200 }
+        response: { type: object, additionalProperties: true, default: {} }
+        latency_ms: { type: integer, minimum: 0, default: 0 }
+
+    TaskStub:
+      type: object
+      description: |
+        Canned output for one non-HTTP task invocation. Keyed by `asset_ref` or
+        `element_id` -- P2's generator emits `asset_ref` only, since testgen
+        never sees the artifact; `element_id` is for hand-written fixtures.
+      properties:
+        element_id: { oneOf: [{ type: string }, { type: "null" }] }
+        asset_ref: { oneOf: [{ type: string }, { type: "null" }] }
+        outputs:
+          type: array
+          default: []
+          items: { type: object, additionalProperties: true }
+      anyOf:
+        - required: [element_id]
+        - required: [asset_ref]
+
+    TestCase:
+      type: object
+      required: [case_id, kind, description, input, assertions]
+      properties:
+        case_id: { type: string, examples: [tc_001] }
+        kind: { $ref: "#/components/schemas/CaseKind" }
+        description: { type: string }
+        input:
+          type: object
+          additionalProperties: true
+        assertions:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/Assertion" }
+        human_task_outcomes:
+          type: object
+          additionalProperties: { type: string }
+          default: {}
+        task_stubs:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/TaskStub" }
+
+    # ---------- Diagnostics ----------
+
+    Diagnostic:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code: { type: string }
+        severity: { type: string, enum: [error, warning, info] }
+        message: { type: string }
+        suggested_fix: { oneOf: [{ type: string }, { type: "null" }] }
+        element_id: { oneOf: [{ type: string }, { type: "null" }] }
+        locator: { oneOf: [{ type: string }, { type: "null" }] }
+
+    SandboxDiagnostic:
+      allOf:
+        - $ref: "#/components/schemas/Diagnostic"
+        - type: object
+          properties:
+            code:
+              pattern: "^(PLT|EXE|ROB)-[A-Z0-9-]+$"
+      description: P3 may only emit codes under its own prefixes. Enforced by tests/contract/test_code_ownership.py.

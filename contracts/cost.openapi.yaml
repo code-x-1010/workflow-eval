@@ -1,0 +1,265 @@
+openapi: 3.1.0
+
+# Cost — P4. Port 8004.
+#
+# FROZEN AFTER D2. Changes need docs/decisions/NNNN-*.md, not a PR.
+# Charter: docs/agents/P4-cost.md
+# Schemas mirror packages/wfeval-core/src/wfeval/core/report.py (CostReport)
+# and wfeval/core/trace.py (Actuals, for /v1/calibrate).
+# If those two ever disagree, the pydantic models win and this file is the bug.
+#
+# Drafted by P1 to meet the "draft all 5 OpenAPI specs by D2" charter item,
+# transcribed from P4's stub (services/cost/src/main.py) rather than invented
+# where the stub already commits to a shape -- P4 signs off before this
+# freezes, particularly on /v1/cost's request body, which the current stub
+# doesn't type yet.
+#
+# HOUSE RULE this whole service exists to enforce: never ship a number without
+# its confidence. `confidence=low` requires a non-empty `assumptions` list --
+# see tests/contract/test_code_ownership.py::test_low_confidence_cost_must_state_assumptions.
+
+info:
+  title: wfeval-cost
+  version: 0.1.0
+  description: |
+    Static cost analysis -- no execution required. What will this artifact
+    cost per run? AND-collapse over the DAG for min/max, bounded enumeration
+    for expected, symbolic when a loop bound is data-dependent (`unbounded`).
+
+    Deliberately excluded from `overall` (see README.md Scoring): a cheap
+    wrong workflow isn't better than an expensive correct one, and mixing them
+    makes both numbers uninterpretable. Gates only when the prompt states a
+    budget (`Spec.budget_per_instance`).
+
+servers:
+  - url: http://localhost:8004
+    description: local / docker-compose
+  - url: http://cost:8004
+    description: in-cluster service name used by the Gateway
+
+tags:
+  - name: cost
+    description: Static per-instance cost estimation.
+  - name: calibration
+    description: Refit cost priors from P3's observed Actuals.
+  - name: ops
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness.
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, owner]
+                properties:
+                  status: { type: string, examples: [ok] }
+                  service: { type: string, examples: [cost] }
+                  owner: { type: string, examples: [P4] }
+
+  /v1/cost:
+    post:
+      tags: [cost]
+      summary: Estimate per-instance cost for an artifact, statically.
+      operationId: estimateCost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CostRequest" }
+      responses:
+        "200":
+          description: Cost estimate. Always carries `confidence`; `assumptions` is non-empty whenever `confidence` is low.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CostReport" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/calibrate:
+    post:
+      tags: [calibration]
+      summary: Refit cost priors from observed execution traces.
+      description: |
+        Consumes P3's `Trace.totals` (the `Actuals` block) to bring priors
+        (agent turn counts, branch probabilities) closer to measured reality.
+        Reports MAPE honestly -- `null` with a `note` when there isn't enough
+        data yet, never a number that looks confident with zero runs behind it.
+      operationId: calibrate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CalibrateRequest" }
+      responses:
+        "200":
+          description: Calibration result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalibrateResponse" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/pricing:
+    get:
+      tags: [cost]
+      summary: The price book version currently in effect.
+      operationId: pricing
+      responses:
+        "200":
+          description: Pricing metadata.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingResponse" }
+
+components:
+  responses:
+    ValidationError:
+      description: Request body failed schema validation.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: array
+                items: { type: object }
+
+  schemas:
+
+    # ---------- requests ----------
+
+    Artifact:
+      type: object
+      additionalProperties: false
+      required: [format, content]
+      properties:
+        format:
+          type: string
+          enum: [bpmn, dmn]
+        content:
+          type: string
+          description: Raw BPMN 2.0 or DMN 1.3 XML.
+
+    CostRequest:
+      type: object
+      additionalProperties: false
+      required: [artifact]
+      properties:
+        artifact: { $ref: "#/components/schemas/Artifact" }
+        spec:
+          description: |
+            Optional. When present, `Spec.budget_per_instance` gates and
+            `DataField.bound` seeds free-variable bounds (e.g. max line
+            items) instead of the DAG's own symbolic defaults. Shape mirrors
+            contracts/intent.openapi.yaml#/components/schemas/Spec -- not
+            duplicated here since Cost only reads it, never produces it.
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    CalibrateRequest:
+      type: object
+      additionalProperties: false
+      required: [traces]
+      properties:
+        traces:
+          type: array
+          description: Execution traces from Sandbox, shape mirrors contracts/sandbox.openapi.yaml#/components/schemas/Trace.
+          items: { type: object, additionalProperties: true }
+
+    # ---------- responses ----------
+
+    Confidence:
+      type: string
+      enum: [low, medium, high]
+
+    CostHotspot:
+      type: object
+      required: [element_id, share, code]
+      properties:
+        element_id: { type: string }
+        share: { type: number, minimum: 0, maximum: 1, description: Fraction of total expected cost attributable to this element. }
+        code: { type: string, pattern: "^COST-[A-Z0-9-]+$" }
+
+    CostReport:
+      type: object
+      required: [currency, pricing_version, confidence, per_instance, unbounded, by_resource, hotspots, assumptions, diagnostics]
+      properties:
+        currency: { type: string, default: USD }
+        pricing_version: { type: string, examples: ["2026-07-15"] }
+        confidence: { $ref: "#/components/schemas/Confidence" }
+        per_instance:
+          type: object
+          description: "min / expected / max, in `currency`."
+          additionalProperties: { type: number }
+        expression:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: Symbolic form when a term is unknown, e.g. "0.031 + 0.012*N_line_items".
+        unbounded:
+          type: boolean
+          description: true when a loop's cardinality is data-dependent with no declared bound -- max is not a real ceiling.
+        by_resource:
+          type: object
+          additionalProperties: { type: number }
+        hotspots:
+          type: array
+          items: { $ref: "#/components/schemas/CostHotspot" }
+        assumptions:
+          type: array
+          items: { type: string }
+          description: MANDATORY (non-empty) whenever confidence is low. Never ship a bare number.
+        diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/CostDiagnostic" }
+      if:
+        properties:
+          confidence: { const: low }
+      then:
+        properties:
+          assumptions: { minItems: 1 }
+
+    CalibrateResponse:
+      type: object
+      required: [mape, priors_updated, note]
+      properties:
+        mape:
+          oneOf: [{ type: number, minimum: 0 }, { type: "null" }]
+          description: Mean absolute percentage error against observed Actuals. null when there isn't enough calibration data yet.
+        priors_updated:
+          type: array
+          items: { type: string }
+        note: { type: string }
+
+    PricingResponse:
+      type: object
+      required: [version, currency]
+      properties:
+        version: { type: string }
+        currency: { type: string }
+
+    # ---------- Diagnostics ----------
+
+    Diagnostic:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code: { type: string }
+        severity: { type: string, enum: [error, warning, info] }
+        message: { type: string }
+        suggested_fix: { oneOf: [{ type: string }, { type: "null" }] }
+        element_id: { oneOf: [{ type: string }, { type: "null" }] }
+        locator: { oneOf: [{ type: string }, { type: "null" }] }
+
+    CostDiagnostic:
+      allOf:
+        - $ref: "#/components/schemas/Diagnostic"
+        - type: object
+          properties:
+            code:
+              pattern: "^COST-[A-Z0-9-]+$"
+      description: P4 may only emit codes under its own prefix. Enforced by tests/contract/test_code_ownership.py.

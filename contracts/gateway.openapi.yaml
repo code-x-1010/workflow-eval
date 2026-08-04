@@ -1,0 +1,277 @@
+openapi: 3.1.0
+
+# Gateway — P1. Port 8000.
+#
+# FROZEN AFTER D2. Changes need docs/decisions/NNNN-*.md, not a PR.
+# Charter: docs/agents/P1-validation.md (Gateway section)
+# Schemas mirror packages/wfeval-core/src/wfeval/core/report.py.
+# If those two ever disagree, the pydantic models win and this file is the bug.
+#
+# Two different things, not one -- see README.md "Scoring" / architecture table:
+#
+#   POST /v1/validate     sync,  sub-2s.  L1-L4 + cost. The blocking
+#                          pre-deployment gate the generation team calls before
+#                          deploying to UiPath Maestro.
+#   POST /v1/evaluations   async, minutes. Full pipeline (+ L5 deploy, L6
+#                          execution, intent alignment). A quality signal for
+#                          generator improvement, not a per-artifact block.
+#
+# Both endpoints share one response shape, EvaluationReport, with whichever
+# slices that path didn't run left null -- there is no separate "fast" report
+# type. `short_circuited_at` says why a slice is null when it isn't simply
+# "this endpoint doesn't run that tier".
+#
+# Orchestration (see services/gateway/src/orchestrate.py):
+#   1. Validation /v1/validate                        (sync, ~500ms)
+#      any gate false -> verdict=fail, SKIP 2-4, short_circuited_at="validation"
+#   2. parallel: Intent /v1/intent + /v1/testcases | Cost /v1/cost | Sandbox /v1/deploy
+#      deploy rejected -> verdict=fail, SKIP 3, short_circuited_at="deploy"
+#   3. Sandbox /v1/executions   (consumes step 2's test cases)   <- minutes, the long pole
+#   4. P4's score() + render(), deliver via callback
+#
+# POST /v1/validate runs only stage 1 plus Cost (no Sandbox, no Intent) -- that
+# is what keeps it sub-2s. It is a reduced pass over the same orchestration,
+# not a separate code path.
+
+info:
+  title: wfeval-gateway
+  version: 0.1.0
+  description: |
+    Thin fan-out over the four services, with short-circuit. The front door the
+    generation team integrates against.
+
+servers:
+  - url: http://localhost:8000
+    description: local / docker-compose
+
+tags:
+  - name: predeploy
+    description: Sync, sub-2s. The blocking pre-deployment gate.
+  - name: evaluations
+    description: Async, minutes. Full quality signal.
+  - name: ops
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness.
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, owner]
+                properties:
+                  status: { type: string, examples: [ok] }
+                  service: { type: string, examples: [gateway] }
+                  owner: { type: string, examples: [P1] }
+
+  /v1/validate:
+    post:
+      tags: [predeploy]
+      summary: Sync pre-deployment gate — Validation (L1-L4) + Cost, no Sandbox/Intent.
+      description: |
+        What the generation team calls before deploying to UiPath Maestro.
+        Fans out to Validation's own `/v1/validate` and Cost's `/v1/cost` in
+        parallel; never calls Sandbox or Intent (those are minutes, not
+        seconds). `intent` and `execution` are always null on this response --
+        that is expected, not a short-circuit.
+      operationId: predeployValidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArtifactSubmission" }
+      responses:
+        "200":
+          description: |
+            Always 200 -- a failing gate is a valid *result*, not a request
+            error. Check `verdict` and `validation.gates`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationReport" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/evaluations:
+    post:
+      tags: [evaluations]
+      summary: Submit an artifact for the full async evaluation pipeline.
+      description: |
+        Accepted immediately; the pipeline (validation -> deploy -> execution ->
+        intent -> cost -> score) runs in the background and may take minutes,
+        dominated by Sandbox execution. Poll `poll_url`, or supply
+        `callback_url` for a webhook delivery instead (D9: HMAC-signed retry).
+
+        Idempotent on `request_id` (D9): replaying the same `request_id`
+        returns the cached `evaluation_id` for the original run rather than
+        starting a second one.
+      operationId: createEvaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluationRequest" }
+      responses:
+        "202":
+          description: Accepted. Poll `poll_url` for the result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationAccepted" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/evaluations/{evaluation_id}:
+    get:
+      tags: [evaluations]
+      summary: Poll for an evaluation's result.
+      operationId: getEvaluation
+      parameters:
+        - name: evaluation_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Pipeline finished. Full report.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationReport" }
+        "202":
+          description: Still running.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationAccepted" }
+        "404":
+          description: Unknown `evaluation_id`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: string }
+
+components:
+  responses:
+    ValidationError:
+      description: Request body failed schema validation.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: array
+                items: { type: object }
+
+  schemas:
+
+    # ---------- requests ----------
+
+    Artifact:
+      type: object
+      additionalProperties: false
+      required: [format, content]
+      properties:
+        format:
+          type: string
+          enum: [bpmn, dmn]
+        content:
+          type: string
+          description: Raw BPMN 2.0 or DMN 1.3 XML, as produced by the generator.
+
+    ArtifactSubmission:
+      type: object
+      additionalProperties: false
+      required: [request_id, platform, artifact, prompt]
+      properties:
+        request_id: { type: string, description: Caller-supplied idempotency key. }
+        platform:
+          type: string
+          enum: [uipath_maestro, n8n]
+          default: uipath_maestro
+        artifact: { $ref: "#/components/schemas/Artifact" }
+        prompt:
+          type: string
+          minLength: 1
+          description: The user's original request. Required here (unlike Validation's own endpoint) because Cost gates on `budget_per_instance` extracted from it.
+
+    EvaluationRequest:
+      allOf:
+        - $ref: "#/components/schemas/ArtifactSubmission"
+        - type: object
+          properties:
+            callback_url:
+              oneOf: [{ type: string, format: uri }, { type: "null" }]
+              description: If set, the Gateway POSTs the final EvaluationReport here (HMAC-signed, retried) instead of relying on polling alone.
+
+    # ---------- responses ----------
+
+    EvaluationAccepted:
+      type: object
+      required: [evaluation_id, status, poll_url]
+      properties:
+        evaluation_id: { type: string, examples: [ev_7f3a91] }
+        status: { type: string, enum: [queued, running] }
+        poll_url: { type: string, examples: ["/v1/evaluations/ev_7f3a91"] }
+
+    Verdict:
+      type: string
+      enum: [pass, pass_with_warnings, fail]
+
+    Confidence:
+      type: string
+      enum: [low, medium, high]
+
+    EvaluationReport:
+      type: object
+      required: [evaluation_id, request_id, platform, verdict, scoring_version, overall, timings_ms]
+      properties:
+        evaluation_id: { type: string }
+        request_id: { type: string }
+        platform: { type: string, enum: [uipath_maestro, n8n] }
+        verdict: { $ref: "#/components/schemas/Verdict" }
+        scoring_version: { type: string, examples: ["0.1.0"] }
+        overall:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: "0 if any gate fails, else 0.35*structural_soundness + 0.35*intent_coverage + 0.30*execution_pass_rate. Cost is deliberately excluded -- see README.md Scoring."
+        validation:
+          oneOf: [{ $ref: "#/components/schemas/ValidationReportSlice" }, { type: "null" }]
+        intent:
+          oneOf: [{ $ref: "#/components/schemas/IntentReportSlice" }, { type: "null" }]
+        execution:
+          oneOf: [{ $ref: "#/components/schemas/ExecutionReportSlice" }, { type: "null" }]
+        cost:
+          oneOf: [{ $ref: "#/components/schemas/CostReportSlice" }, { type: "null" }]
+        timings_ms:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+        short_circuited_at:
+          oneOf: [{ type: string, enum: [validation, deploy] }, { type: "null" }]
+          description: Which stage stopped the pipeline, if any. Downstream slices are null because they never ran, not because they failed.
+
+    # ---------- per-service slices (thin references; each service owns the full shape in its own contract) ----------
+
+    ValidationReportSlice:
+      type: object
+      description: See contracts/validation.openapi.yaml#/components/schemas/ValidationReport.
+      additionalProperties: true
+
+    IntentReportSlice:
+      type: object
+      description: See contracts/intent.openapi.yaml#/components/schemas/IntentReport.
+      additionalProperties: true
+
+    ExecutionReportSlice:
+      type: object
+      description: See contracts/sandbox.openapi.yaml#/components/schemas/ExecutionReport.
+      additionalProperties: true
+
+    CostReportSlice:
+      type: object
+      description: See contracts/cost.openapi.yaml#/components/schemas/CostReport.
+      additionalProperties: true
