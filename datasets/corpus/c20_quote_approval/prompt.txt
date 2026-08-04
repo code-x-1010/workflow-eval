@@ -1,0 +1,1 @@
+A rep builds a quote. Work out the discount percentage against list price. Discounts up to 10 percent need no approval. Between 10 and 25 percent the sales manager approves. Over 25 percent it goes to the VP of sales. If any approver rejects it, send it back to the rep with the reason. Approved quotes are sent to the customer and the CRM opportunity is updated.

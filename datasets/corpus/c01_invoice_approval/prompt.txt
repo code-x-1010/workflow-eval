@@ -1,0 +1,1 @@
+When an invoice arrives by email, extract the vendor, the amount and the line items. If the amount is over 10000 send it to a manager for approval; otherwise pay it automatically. If the payment API fails, park the invoice for the finance team to review rather than retrying. Either way, notify the vendor once the invoice is settled. Keep it under 50 cents per invoice.

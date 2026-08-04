@@ -1,0 +1,1 @@
+When monitoring raises an alert, enrich it with the affected service and recent deploys. Sev1 means paging the on-call, notifying the status page and opening a bridge call — all three at once. Sev2 pages the on-call only. Sev3 creates a ticket for the next working day. After the incident is closed, the on-call writes a postmortem.

@@ -1,0 +1,1 @@
+When a candidate applies, parse their CV and score it against the job requirements out of 100. Anything scoring below 40 is rejected automatically with a polite email. Scores of 70 and above go straight to the hiring manager to book a first interview. Everything in between goes to a recruiter for a manual read, and the recruiter decides whether to shortlist or reject.

@@ -1,0 +1,1 @@
+An employee requests leave. Check their remaining balance first — if they do not have enough days, decline immediately and tell them how many they have left. Requests of 5 days or fewer are approved by their line manager. Longer requests need the department head as well. On approval, deduct the days from the balance and put the leave in the team calendar.
