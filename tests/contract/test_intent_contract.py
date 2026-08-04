@@ -94,6 +94,26 @@ def test_golden_example_on_disk_is_contract_valid(path: str) -> None:
     validate(json.loads((EXAMPLES / filename).read_text()), response_schema)
 
 
+def test_real_extraction_is_also_contract_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`make dev-real` runs /v1/spec's real extractor instead of the golden
+    file. Contract validity is a property of the service, not of the example it
+    happens to be serving today, so both paths are checked -- and every corpus
+    prompt goes through, since one prompt proving nothing is how a contract test
+    passes while the endpoint is broken for 39 others."""
+    from services.intent.src import main as intent_main
+
+    monkeypatch.setenv("WFEVAL_STUB_DEPS", "0")
+    monkeypatch.setattr(intent_main.SPEC_CACHE, "root", tmp_path)
+
+    corpus = ROOT / "datasets" / "corpus"
+    manifest = json.loads((corpus / "manifest.json").read_text())
+    for case in manifest["cases"]:
+        prompt = (corpus / case["prompt_path"]).read_text()
+        r = client.post("/v1/spec", json={"prompt": prompt})
+        assert r.status_code == 200, f"{case['id']}: {r.text}"
+        validate(r.json(), "SpecResponse")
+
+
 def test_healthz() -> None:
     r = client.get("/healthz")
     assert r.status_code == 200
@@ -187,6 +207,34 @@ def test_a_score_never_ships_without_its_agreement_rate() -> None:
     # null is permitted only when no score is being reported.
     scoreless = {"scores": {}, "diagnostics": [], "judge_agreement": None, "spec_source": "extracted"}
     validate(scoreless, "IntentReport")
+
+
+def test_nothing_prompt_derived_imports_the_artifact_side() -> None:
+    """Leg 2 of the anti-circularity guarantee, done statically here because it
+    is not being done anywhere else today: `.importlinter` contract 2 names the
+    module `intent.testgen`, which is not importable under any root package the
+    config declares, so import-linter reports "module does not exist" and the
+    contract never runs. See docs/decisions/0010 -- P1 owns that file.
+
+    This scan is not a replacement for the import-linter contract (it does not
+    follow transitive imports). It is what stops the guarantee being purely
+    decorative in the meantime.
+    """
+    forbidden = ("wfeval.core.ast", "wfeval.adapters", "wfeval.core.trace")
+    src = ROOT / "services" / "intent" / "src"
+    prompt_derived = sorted(list(src.glob("testgen/**/*.py")) + [src / "extract.py", src / "cache.py"])
+    assert prompt_derived, "the prompt-derived modules moved; this test is now scanning nothing"
+
+    for path in prompt_derived:
+        if not path.exists():
+            continue
+        text = path.read_text()
+        for module in forbidden:
+            assert module not in text, (
+                f"{path.relative_to(ROOT)} references {module}. Test generation and Spec "
+                f"extraction derive from the PROMPT alone; reading the artifact makes the "
+                f"execution tier a tautology. Express it semantically instead."
+            )
 
 
 def test_served_app_matches_the_frozen_contracts_surface() -> None:

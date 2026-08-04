@@ -3,11 +3,16 @@
 Service: intent  |  Port: 8002  |  Owner: P2
 Charter: docs/agents/P2-*.md      Contract: contracts/intent.openapi.yaml
 
-D3 STUB. Every endpoint returns the committed golden example from
-`contracts/examples/`, so the other three agents are never blocked on P2's
-generator. The *shapes* here are real and frozen; the *values* are the golden
-data and do not vary with the request. Replace endpoint bodies with real logic;
-do not change the response SHAPES without a decision record.
+D3 STUB. Stubbed -- which is the default, and what `make dev` runs -- every
+endpoint returns the committed golden example from `contracts/examples/`, so
+the other three agents are never blocked on P2's generator. The *shapes* are
+real and frozen; the *values* are the golden data and do not vary with the
+request. Replace endpoint bodies with real logic; do not change the response
+SHAPES without a decision record.
+
+`WFEVAL_STUB_DEPS=0` (`make dev-real`) runs what is real so far: today that is
+`/v1/spec`'s deterministic extraction, disk-cached by content hash. Real output
+is thinner than the golden example on purpose -- see extract.py on residue.
 
 Three things are already real, and must stay real when the bodies are replaced:
 
@@ -29,13 +34,20 @@ from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 
 from wfeval.core.ir import Spec
-from wfeval.core.stubs import golden
+from wfeval.core.stubs import golden, stubbing
 from wfeval.core.testcase import CaseKind
+
+from .cache import DiskCache
+from .extract import EXTRACTOR_VERSION, extract
 
 app = FastAPI(title="wfeval-intent", version="0.1.0")
 
 SERVICE = "intent"
 OWNER = "P2"
+
+# Keyed by extractor version as well as prompt, so changing the rules does not
+# leave the cache serving specs from an extractor that no longer exists.
+SPEC_CACHE = DiskCache(namespace="spec", version=EXTRACTOR_VERSION)
 
 Prompt = Annotated[str, Field(min_length=1, description="The user's natural-language request, verbatim.")]
 
@@ -94,10 +106,21 @@ def healthz() -> dict[str, str]:
 
 @app.post("/v1/spec")
 def extract_spec(body: SpecRequest) -> dict[str, Any]:
-    # TODO(P2 D3-D4): structured extraction from body.prompt, disk-cached by
-    # sha256(prompt) so the same prompt twice costs zero LLM calls.
+    """Stubbed (the default) this returns the golden example, so anyone wiring
+    against :8002 today gets the same fully-populated Spec every time.
+
+    `WFEVAL_STUB_DEPS=0` runs the real extractor: deterministic rules over the
+    prompt, disk-cached by sha256(prompt) + extractor version. The split
+    matches `make dev` vs `make dev-real` -- real output is thinner than the
+    golden example on purpose (see extract.py on residue) and would otherwise
+    surprise three agents who are building against the example.
+    """
+    if stubbing():
+        return _served("spec.response.json")
+    spec, _cached = SPEC_CACHE.get_or_compute(body.prompt, lambda: extract(body.prompt).model_dump())
+    # TODO(P2 D4): the Refiner pass for the residue, through this same cache.
     # TODO(P2 D5): real SPEC-* sufficiency diagnostics (registry: docs/decisions/0008).
-    return _served("spec.response.json")
+    return {"spec": spec, "sufficiency_diagnostics": []}
 
 
 @app.post("/v1/intent")
