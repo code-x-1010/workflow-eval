@@ -94,6 +94,13 @@ def test_elements_without_loop_characteristics_have_no_loop_spec():
     assert ast.element("Task_extract").loop is None
 
 
+def test_timer_expression_extracted():
+    ast = parse(RICH_BPMN)
+    timer = ast.element("Timer_approval_sla")
+    assert timer.attributes["timer_type"] == "duration"
+    assert timer.attributes["timer_expression"] == "P2D"
+
+
 def test_uipath_extension_attributes_captured_generically():
     ast = parse(RICH_BPMN)
     attrs = ast.element("Task_autopay").attributes

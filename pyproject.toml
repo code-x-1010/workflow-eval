@@ -31,3 +31,9 @@ namespace_packages = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["packages/wfeval-core/src", "packages/wfeval-adapters/src", "."]
+# Several agents' test dirs use the same basenames (test_main.py under both
+# tests/unit/sandbox/ and tests/unit/gateway/, likely more as P2/P4 add
+# theirs) with no __init__.py anywhere under tests/. The default "prepend"
+# import mode resolves modules by basename and collides on exactly that;
+# importlib mode keys off the full file path instead, so it doesn't.
+addopts = "--import-mode=importlib"

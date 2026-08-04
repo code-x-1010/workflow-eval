@@ -107,6 +107,9 @@ def parse(content: str, *, platform: str = "uipath_maestro") -> WorkflowAST:
             if default_ref:
                 default_flow_ids.add(default_ref)
             reads, writes = _variables(el)
+            attributes = _uipath_attributes(el)
+            if kind == ElementKind.TIMER:
+                attributes.update(_timer_attributes(el))
             elements.append(Element(
                 id=_require_id(el),
                 kind=kind,
@@ -117,7 +120,7 @@ def parse(content: str, *, platform: str = "uipath_maestro") -> WorkflowAST:
                 variables_read=reads,
                 variables_written=writes,
                 asset_ref=_asset_ref(el),
-                attributes=_uipath_attributes(el),
+                attributes=attributes,
             ))
             if tag == "subProcess":
                 walk(el)
@@ -161,6 +164,28 @@ def _require_id(el: etree._Element) -> str:
     if not el_id:
         raise AdapterParseError(f"<{_local(el)}> element has no id.")
     return el_id
+
+
+_TIMER_VALUE_TAGS = ("timeDuration", "timeDate", "timeCycle")
+
+
+def _timer_attributes(el: etree._Element) -> dict[str, str]:
+    """Extract the ISO-8601 expression off a TIMER element's
+    timerEventDefinition. `timer_type` is `duration`|`date`|`cycle`;
+    `timer_expression` is the raw text, e.g. "P2D" -- validated for real
+    ISO-8601 conformance by L3, not here (the adapter's job is extraction,
+    not validation)."""
+    timer_def = _child(el, "timerEventDefinition")
+    if timer_def is None:
+        return {}
+    for tag in _TIMER_VALUE_TAGS:
+        value_el = _child(timer_def, tag)
+        if value_el is not None and value_el.text and value_el.text.strip():
+            return {
+                "timer_type": tag.removeprefix("time").lower(),
+                "timer_expression": value_el.text.strip(),
+            }
+    return {}
 
 
 def _kind_for(el: etree._Element) -> ElementKind:
