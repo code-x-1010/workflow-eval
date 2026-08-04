@@ -1,5 +1,6 @@
 [importlinter]
-root_packages = wfeval
+root_packages =
+    wfeval
 include_external_packages = True
 
 [importlinter:contract:1]

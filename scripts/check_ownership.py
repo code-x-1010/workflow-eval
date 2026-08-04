@@ -31,9 +31,9 @@ EXPLICIT_ONLY = {"P4": ["services/gateway/"]}
 
 def changed_files(base: str) -> list[str]:
     out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, check=False)
     if out.returncode != 0:
-        out = subprocess.run(["git", "diff", "--name-only"], capture_output=True, text=True)
+        out = subprocess.run(["git", "diff", "--name-only"], capture_output=True, text=True, check=False)
     return [f for f in out.stdout.splitlines() if f.strip()]
 
 

@@ -4,6 +4,12 @@ on: [push, pull_request]
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      # No installable packages under packages/*|services/* (src/-only layout,
+      # see docs/decisions/0007-uv-workspace-does-not-sync.md) -- mirrors the
+      # Dockerfile's PYTHONPATH. pytest picks this up too via [tool.pytest.ini_options],
+      # but mypy/lint-imports run outside pytest so need it set explicitly here.
+      PYTHONPATH: packages/wfeval-core/src:packages/wfeval-adapters/src:.
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -24,6 +30,8 @@ jobs:
   corpus:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: packages/wfeval-core/src:packages/wfeval-adapters/src:.
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
