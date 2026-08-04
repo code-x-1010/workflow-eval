@@ -1,4 +1,4 @@
-# 0010 — `scripts/check_ownership.py` didn't recognize `contracts/*.openapi.yaml` or any `tests/unit/**` path
+# 0012 — `scripts/check_ownership.py` didn't recognize `contracts/*.openapi.yaml` or any `tests/unit/**` path
 
 **Author:** P1   **Date:** 2026-08-03   **Status:** accepted   **Affects:** P1, P2, P3, P4
 
