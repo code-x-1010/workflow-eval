@@ -1,0 +1,253 @@
+openapi: 3.1.0
+
+# Structural Validation — P1. Port 8001.
+#
+# FROZEN AFTER D2. Changes need docs/decisions/NNNN-*.md, not a PR.
+# Charter: docs/agents/P1-validation.md
+# Schemas mirror packages/wfeval-core/src/wfeval/core/{ast,diagnostics,report}.py.
+# If those two ever disagree, the pydantic models win and this file is the bug.
+#
+# The four-tier ladder (L1 schema, L2 references, L3 structure, L4 soundness +
+# dataflow) runs cheapest-first with an internal short-circuit: L4 does not run
+# if L1 failed, because the result would be meaningless. `tiers_run` /
+# `tiers_skipped` on the response say which tiers actually executed and why.
+#
+# L2 depends on P3's asset registry (GET /v1/assets) but must never hard-fail
+# when Sandbox is down -- it degrades to `tiers_skipped.L2 = "<reason>"` and the
+# artifact proceeds. See docs/agents/P1-validation.md.
+
+info:
+  title: wfeval-validation
+  version: 0.1.0
+  description: |
+    Answers one question: will this artifact load and run on the platform?
+    Sync, no LLM, sub-second (L1-L3; L4 adds up to ~1s). Never blocks on
+    another service being up -- degrades tiers instead of failing the request.
+
+servers:
+  - url: http://localhost:8001
+    description: local / docker-compose
+  - url: http://validation:8001
+    description: in-cluster service name used by the Gateway
+
+tags:
+  - name: validation
+    description: The four-tier static validation ladder.
+  - name: diagnostics
+    description: The public diagnostic code registry.
+  - name: ops
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness.
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, owner]
+                properties:
+                  status: { type: string, examples: [ok] }
+                  service: { type: string, examples: [validation] }
+                  owner: { type: string, examples: [P1] }
+
+  /v1/validate:
+    post:
+      tags: [validation]
+      summary: Run the L1-L4 static validation ladder against an artifact.
+      description: |
+        Runs tiers cheapest-first with an internal short-circuit: if L1 (schema)
+        fails, L2-L4 are skipped -- their results would be meaningless against
+        malformed input. `options.tiers` lets a caller request a subset (e.g.
+        the Gateway's fast pre-deploy path may only need L1-L3); omitted means
+        all four.
+
+        L4 (soundness + dataflow) ships at `warning` severity in v1 -- see
+        docs/agents/P1-validation.md -- so it never flips `gates`, only
+        `scores` and `diagnostics`.
+      operationId: validate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ValidateRequest" }
+      responses:
+        "200":
+          description: Validation report. Always 200 -- a structurally invalid artifact is a valid *result*, not a request error.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationReport" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/diagnostics/codes:
+    get:
+      tags: [diagnostics]
+      summary: The public diagnostic code registry for this service's prefixes.
+      description: |
+        `SCH-*` `REF-*` `STR-*` `FLW-*` `DMN-*`. Codes are append-only -- the
+        generation team's repair loop keys off these strings, so a code once
+        published here is never renamed or repurposed.
+      operationId: diagnosticCodes
+      responses:
+        "200":
+          description: Prefix ownership plus every code this service can emit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiagnosticCodesResponse" }
+
+components:
+  responses:
+    ValidationError:
+      description: Request body failed schema validation.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: array
+                items: { type: object }
+
+  schemas:
+
+    # ---------- requests ----------
+
+    Artifact:
+      type: object
+      additionalProperties: false
+      required: [format, content]
+      properties:
+        format:
+          type: string
+          enum: [bpmn, dmn]
+        content:
+          type: string
+          description: Raw BPMN 2.0 or DMN 1.3 XML, as produced by the generator.
+
+    ValidationTier:
+      type: string
+      enum: [L1, L2, L3, L4]
+
+    ValidateRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id, platform, artifact]
+      properties:
+        request_id:
+          type: string
+          description: Caller-supplied idempotency key. Same id, same artifact -> same report.
+        platform:
+          type: string
+          enum: [uipath_maestro, n8n]
+          default: uipath_maestro
+          description: n8n is deferred to v1.1; accepted so callers need not change later.
+        artifact: { $ref: "#/components/schemas/Artifact" }
+        prompt:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: |
+            Optional. Not needed for L1-L3 (pure structure). Carried through so a
+            future analyser (e.g. a budget-aware L4 check) can use it without a
+            request-shape change; absent today's checks ignore it.
+        options:
+          type: object
+          additionalProperties: false
+          properties:
+            tiers:
+              type: array
+              description: Which tiers to run. Omitted means all four, subject to the internal short-circuit.
+              items: { $ref: "#/components/schemas/ValidationTier" }
+              uniqueItems: true
+              minItems: 1
+
+    # ---------- responses ----------
+
+    ValidationReport:
+      type: object
+      required: [gates, scores, diagnostics, tiers_run, tiers_skipped]
+      properties:
+        gates:
+          type: object
+          description: Binary pass/fail per gate, e.g. `schema_validity`, `reference_integrity`. L4 never appears here -- warning severity only.
+          additionalProperties: { type: boolean }
+        scores:
+          type: object
+          description: 0..1 per dimension, e.g. `structural_soundness`. null for a tier not yet implemented.
+          additionalProperties:
+            oneOf:
+              - { type: number, minimum: 0, maximum: 1 }
+              - { type: "null" }
+        diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationDiagnostic" }
+        ast_digest:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: sha256 of the parsed artifact, for downstream caching/correlation.
+        tiers_run:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationTier" }
+        tiers_skipped:
+          type: object
+          description: |
+            tier -> human-readable reason, e.g. `L2: "asset registry unavailable"` or
+            `L4: "not run: L1 failed"`. A skipped tier is never silently absent.
+          additionalProperties: { type: string }
+
+    DiagnosticCodesResponse:
+      type: object
+      required: [prefixes, codes]
+      properties:
+        prefixes:
+          type: object
+          description: PREFIX_OWNER -- every diagnostic prefix in the layer and which agent owns it, not only this service's own.
+          additionalProperties: { type: string }
+        codes:
+          type: array
+          items: { $ref: "#/components/schemas/DiagnosticCodeInfo" }
+
+    DiagnosticCodeInfo:
+      type: object
+      required: [code, severity_default, description]
+      properties:
+        code: { type: string, pattern: "^(SCH|REF|STR|FLW|DMN)-[A-Z0-9-]+$" }
+        severity_default: { type: string, enum: [error, warning, info] }
+        description: { type: string }
+
+    # ---------- Diagnostics (mirrors wfeval.core.diagnostics) ----------
+
+    Diagnostic:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code:
+          type: string
+          description: PREFIX-CATEGORY-DETAIL. Append-only, prefix-owned (PREFIX_OWNER in diagnostics.py).
+        severity:
+          type: string
+          enum: [error, warning, info]
+        message:
+          type: string
+          description: Human-readable, specific to this artifact.
+        suggested_fix:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: |
+            HOUSE RULE: an imperative the generator can act on -- "Connect an
+            outgoing flow from Gateway_0kk", not "the graph is invalid".
+        element_id:
+          oneOf: [{ type: string }, { type: "null" }]
+        locator:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: XPath (BPMN/DMN) or JSON pointer (n8n).
+
+    ValidationDiagnostic:
+      allOf:
+        - $ref: "#/components/schemas/Diagnostic"
+        - type: object
+          properties:
+            code:
+              pattern: "^(SCH|REF|STR|FLW|DMN)-[A-Z0-9-]+$"
+      description: P1 may only emit codes under its own prefixes. Enforced by tests/contract/test_code_ownership.py.
