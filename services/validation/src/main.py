@@ -3,14 +3,17 @@
 Service: validation  |  Port: 8001  |  Owner: P1
 Charter: docs/agents/P1-*.md      Contract: contracts/validation.openapi.yaml
 
-STUB. Returns contract-valid golden data so the other three agents are never
-blocked on you. Replace endpoint bodies with real logic; do not change the
-response SHAPES without a decision record.
+L1 and L3 are real (see l1_schema.py, l3_structure.py). L2 needs Sandbox's
+asset registry (D8) and L4 needs the BPMN -> workflow-net soundness pass
+(D6-D7) -- both still report via tiers_skipped rather than pretending to run.
+Do not change the response SHAPES without a decision record.
 """
 from typing import Any
 
 from fastapi import FastAPI
-from wfeval.core.stubs import golden
+from wfeval.core.diagnostics import PREFIX_OWNER
+
+from . import l1_schema, l3_structure
 
 app = FastAPI(title="wfeval-validation", version="0.1.0")
 
@@ -25,12 +28,64 @@ def healthz() -> dict[str, str]:
 
 @app.post("/v1/validate")
 def validate(body: dict[str, Any]) -> dict[str, Any]:
-    # TODO(P1 D4-D5): L1 schema, L3 structure. D6-D8: L2, L4.
-    # Short-circuit inside the ladder: don't run L4 if L1 failed.
-    return golden("validation.response.json")
+    artifact = body.get("artifact") or {}
+    content: str = artifact.get("content", "")
+    platform: str = body.get("platform", "uipath_maestro")
+    requested_tiers: list[str] = (body.get("options") or {}).get("tiers") or ["L1", "L2", "L3", "L4"]
+
+    diagnostics: list[dict[str, Any]] = []
+    gates: dict[str, bool] = {}
+    scores: dict[str, float] = {}
+    tiers_run: list[str] = []
+    tiers_skipped: dict[str, str] = {}
+
+    # Parsing is a prerequisite for every other tier, not an optional one --
+    # it always runs even if the caller didn't ask to see L1's own result.
+    ast, l1_diagnostics, schema_validity = l1_schema.check(content, platform=platform)
+    diagnostics.extend(d.model_dump(mode="json") for d in l1_diagnostics)
+    if "L1" in requested_tiers:
+        tiers_run.append("L1")
+        gates["schema_validity"] = schema_validity
+    else:
+        tiers_skipped["L1"] = "not requested"
+
+    if ast is None:
+        # Short-circuit: L2-L4 have nothing to run against without an AST.
+        for tier in ("L2", "L3", "L4"):
+            tiers_skipped.setdefault(tier, "not run: L1 failed to parse the artifact")
+        return _report(gates, scores, diagnostics, ast_digest=None,
+                        tiers_run=tiers_run, tiers_skipped=tiers_skipped)
+
+    tiers_skipped["L2"] = "not implemented until D8 (needs Sandbox's asset registry)"
+
+    if "L3" in requested_tiers:
+        l3_diagnostics = l3_structure.check(ast)
+        diagnostics.extend(d.model_dump(mode="json") for d in l3_diagnostics)
+        scores["structural_soundness"] = l3_structure.score(l3_diagnostics, len(ast.elements))
+        tiers_run.append("L3")
+    else:
+        tiers_skipped["L3"] = "not requested"
+
+    tiers_skipped["L4"] = "not implemented until D6-D7 (soundness + dataflow)"
+
+    return _report(gates, scores, diagnostics, ast_digest=ast.digest,
+                    tiers_run=tiers_run, tiers_skipped=tiers_skipped)
+
+
+def _report(
+    gates: dict[str, bool], scores: dict[str, float], diagnostics: list[dict[str, Any]],
+    *, ast_digest: str | None, tiers_run: list[str], tiers_skipped: dict[str, str],
+) -> dict[str, Any]:
+    return {
+        "gates": gates,
+        "scores": scores,
+        "diagnostics": diagnostics,
+        "ast_digest": ast_digest,
+        "tiers_run": tiers_run,
+        "tiers_skipped": tiers_skipped,
+    }
 
 
 @app.get("/v1/diagnostics/codes")
 def codes() -> dict[str, Any]:
-    from wfeval.core.diagnostics import PREFIX_OWNER
     return {"prefixes": PREFIX_OWNER, "codes": []}
