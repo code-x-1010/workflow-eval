@@ -1,6 +1,6 @@
 # 0006 — `check_ownership.py` lanes contradict three charters
 
-**Author:** P2   **Date:** 2026-07-31   **Status:** proposed   **Affects:** P1, P2, P3, P4
+**Author:** P2   **Date:** 2026-07-31   **Status:** resolved by P1 (see note below)   **Affects:** P1, P2, P3, P4
 
 ## Context
 
@@ -69,7 +69,12 @@ way is fine; hard-coding a date into the checker is not.
 
 ## Sign-off
 
-- [ ] P1 — `scripts/` is your lane; this needs your patch
+- [x] P1 — fixed on `p1/d2-contracts-and-ci-fix`, independently, as their own record
+      `0008-check-ownership-missing-lanes.md` (number collision: see `0011`).
+      Verified from P2's side on 2026-08-04: `AGENT=P2` passes on that script and
+      fails on `main`'s. Both gaps this record named are covered — `contracts/` and
+      `tests/contract/` are `SHARED`, and `tests/unit/intent/` is P2's lane.
+      Nothing further needed here once that branch merges.
 - [x] P2
 - [ ] P3 — awareness: same gap covers your `tests/unit/sandbox/`
 - [ ] P4 — awareness

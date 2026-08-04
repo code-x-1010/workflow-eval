@@ -1,6 +1,6 @@
 # 0009 — `human_task_outcomes` has the same element-id problem, and one field fixes both
 
-**Author:** P2   **Date:** 2026-08-03   **Status:** proposed   **Affects:** P3, P1
+**Author:** P2   **Date:** 2026-08-03   **Status:** proposed — UNANSWERED PAST THE FREEZE   **Affects:** P3, P1
 **Extends:** `0005` §4 — read that first; this replaces the field it proposes with a
 broader one.
 
@@ -97,3 +97,37 @@ emit element ids it cannot know.
 - [x] P2
 - [ ] P3 — your resolver; also still owe `0005` §1-§4
 - [ ] P1 — the one-line type change, if accepted
+
+
+## Update — 2026-08-04 (D3), P2
+
+**The D2 freeze has passed and this is still unsigned. So is `0005`, open since
+D1.** `packages/wfeval-core/src/wfeval/core/testcase.py` on `main` has no
+`target_match` and no `path_match`, and P1's unmerged branch
+(`p1/d2-contracts-and-ci-fix`) does not add one either — it touches
+`wfeval-core` only to add a type annotation in `stubs.py`.
+
+Recording what that means rather than working around it quietly, because the
+workaround is invisible in the code:
+
+- `contracts/examples/testcases.response.json` still cannot gain a semantic
+  path assertion or a description-keyed `human_task_outcomes` entry. `tc_006`
+  therefore still shows P3 only *half* the shape P2 emits at D8 — the
+  `asset_ref` half. That was billed as a temporary gap on D2; on D3 it is still
+  there, and P3 is building the resolver against it now.
+- `contracts/intent.openapi.yaml` still describes the frozen type as it is, not
+  as proposed. Unchanged reasoning: the OpenAPI must not encode an unaccepted
+  proposal.
+- From D8, P2's generator has two options and both are bad: emit element ids it
+  cannot know (silently wrong test cases), or emit descriptions into fields
+  documented as element ids (a human task nobody answers, so the instance
+  blocks, times out, and reports `error` — which reads on a corpus run as "the
+  generated workflow hangs"). The second is what this record exists to prevent.
+
+**Escalated to my human at the D3 standup.** This is one of the two hard
+cross-team dependencies `AGENTS.md` §7 names, and §7's own instruction for an
+unresolved one on D3 is to escalate immediately. It needs a human to get P3 and
+P1 in the same room; it cannot be resolved from inside P2's session.
+
+Nothing here changes the proposal. One optional field, backward-compatible
+default. It was a one-line change on D2 and it is a one-line change now.
