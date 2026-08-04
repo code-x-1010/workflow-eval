@@ -15,14 +15,19 @@ import sys
 
 LANES: dict[str, list[str]] = {
     "P1": ["packages/", "services/validation/", "services/gateway/",
-           ".github/", "Makefile", "pyproject.toml", ".importlinter", "CODEOWNERS", "scripts/"],
-    "P2": ["services/intent/", "datasets/"],
-    "P3": ["services/sandbox/", "sandbox-infra/"],
+           ".github/", "Makefile", "pyproject.toml", ".importlinter", "CODEOWNERS", "scripts/",
+           "tests/unit/core/", "tests/unit/adapters/", "tests/unit/validation/", "tests/unit/gateway/"],
+    "P2": ["services/intent/", "datasets/", "tests/unit/intent/"],
+    "P3": ["services/sandbox/", "sandbox-infra/", "tests/unit/sandbox/"],
     "P4": ["services/cost/", "services/gateway/src/weights.yaml",
-           "services/gateway/src/score.py", "services/gateway/src/render.py"],
+           "services/gateway/src/score.py", "services/gateway/src/render.py", "tests/unit/cost/"],
 }
-# Everyone may touch these.
-SHARED = ["docs/decisions/", "tests/fixtures/", "contracts/examples/", "README.md"]
+# Everyone may touch these. `contracts/` (not just contracts/examples/) belongs
+# here too: CODEOWNERS already lists /contracts/*.openapi.yaml as @P1 @P2 @P3 @P4,
+# and tests/contract/ holds the guarantees every agent's diagnostics/anti-
+# circularity checks assert against each other's outputs (see README.md's
+# Layout section) -- neither is any single agent's alone.
+SHARED = ["docs/decisions/", "tests/fixtures/", "tests/contract/", "contracts/", "README.md"]
 
 # P4 owns three files inside P1's gateway; make sure the prefix rule doesn't
 # accidentally grant P4 the whole directory.
