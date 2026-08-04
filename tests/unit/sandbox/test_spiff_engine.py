@@ -22,8 +22,11 @@ def _artifact() -> dict:
 def test_happy_path_takes_the_autopay_branch():
     case = TestCase(
         case_id="tc_001", kind=CaseKind.HAPPY, description="under threshold", input={"amount": 250.0},
-        assertions=[Assertion(type=AssertionType.PATH, description="auto-pay branch",
-                               must_traverse=["Gateway_amount", "Task_autopay"], must_not_traverse=["Task_approval"])],
+        assertions=[
+            Assertion(type=AssertionType.PATH, description="auto-pay branch",
+                      must_traverse=["Gateway_amount", "Task_autopay"], must_not_traverse=["Task_approval"]),
+            Assertion(type=AssertionType.OUTPUT, description="settles invoice", field="status", equals="SETTLED"),
+        ],
         task_stubs=[
             TaskStub(element_id="Task_extract", outputs=[{"vendor": "Acme Ltd", "amount": 250.0}]),
             TaskStub(element_id="Task_autopay", outputs=[{"status": "SETTLED"}]),
@@ -38,6 +41,24 @@ def test_happy_path_takes_the_autopay_branch():
                            "Task_notify", "EndEvent_done"]
     assert trace.runner == "spiff"
     assert trace.fidelity == "reduced"
+
+
+def test_output_assertion_failure_marks_case_failed():
+    case = TestCase(
+        case_id="tc_output", kind=CaseKind.HAPPY, description="output mismatch", input={"amount": 250.0},
+        assertions=[Assertion(type=AssertionType.OUTPUT, description="settles invoice",
+                               field="status", equals="SETTLED")],
+        task_stubs=[
+            TaskStub(element_id="Task_extract", outputs=[{"vendor": "Acme Ltd", "amount": 250.0}]),
+            TaskStub(element_id="Task_autopay", outputs=[{"status": "PENDING_APPROVAL"}]),
+            TaskStub(element_id="Task_notify", outputs=[{}]),
+        ],
+    )
+    trace, diagnostics, status, failed = run_case(_artifact(), case, mocks=[], timeout_s=10)
+    assert diagnostics == []
+    assert trace.status == "completed"
+    assert status == "fail"
+    assert failed == "settles invoice"
 
 
 def test_boundary_case_routes_to_approval_and_resolves_the_human_task():
