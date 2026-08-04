@@ -119,4 +119,5 @@ after it without another round of this.
 
 - [x] P2
 - [ ] P3 — §1 is your own proposal, ticked from my side; §4 needs your call
+      (still unsigned on D3, past the freeze — see the 2026-08-04 update in `0009`)
 - [ ] P1 — awareness only: `wfeval.adapters.parse()` becomes critical path at D8
