@@ -6,11 +6,11 @@ test below feeds it a known-bad artifact derived from a real corpus case and
 asserts it complains. Without these, `--check` passing on 40 hand-authored
 inputs proves nothing about the checker.
 
-Lives here rather than in `tests/unit/intent/` because `scripts/check_ownership.py`
-puts only `services/intent/` and `datasets/` in P2's lane (see
-docs/decisions/0006). `make test` runs `tests/unit`, so run these with:
-
-    pytest datasets
+Lived under `datasets/tools/` until D4, and so ran in no CI at all -- `make test`
+runs `tests/unit`, and only `services/intent/` and `datasets/` were in P2's lane
+(docs/decisions/0006). P1's fix added `tests/unit/intent/` to that lane, so these
+moved here and now run on every push. `datasets/` stays importable via the path
+line below, because the code under test is the corpus emitter that lives there.
 """
 from __future__ import annotations
 
@@ -19,12 +19,13 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+DATASETS = Path(__file__).resolve().parents[3] / "datasets"
+sys.path.insert(0, str(DATASETS))
 
-from tools.bpmn import branch, check, derive_patterns, emit, end, goto, par, start, task, xor  # noqa: E402
-from tools.cases import ALL_CASES  # noqa: E402
+from tools.bpmn import branch, check, derive_patterns, emit, end, goto, par, start, task, xor
+from tools.cases import ALL_CASES
 
-CORPUS = Path(__file__).resolve().parents[1] / "corpus"
+CORPUS = DATASETS / "corpus"
 GOOD = (CORPUS / "c01_invoice_approval" / "reference.bpmn").read_text()
 
 

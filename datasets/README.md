@@ -36,13 +36,14 @@ fails it today (`Gateway_amount`'s flows have neither), which is why P3 could no
 run the shared fixture through Spiff. That defect is deliberate there. It must
 not be accidental here.
 
-`pytest datasets` runs the emitter and validator tests. They matter more than
-they look: `--check` passing on 40 authored inputs says nothing about whether
-the checker *catches* anything, so `tools/test_bpmn.py` feeds it known-bad
-artifacts (dangling flow ref, duplicate id, unreachable element, unconditioned
-non-default split, two start events) and asserts it complains about each. They
-live under `datasets/` rather than `tests/unit/` because that is P2's lane, so
-`make test` does not pick them up — see `docs/decisions/0006`.
+`make test` runs the emitter and validator tests, in
+`tests/unit/intent/test_corpus_bpmn.py`. They matter more than they look:
+`--check` passing on 40 authored inputs says nothing about whether the checker
+*catches* anything, so they feed it known-bad artifacts (dangling flow ref,
+duplicate id, unreachable element, unconditioned non-default split, two start
+events) and assert it complains about each. They sat under `datasets/` and
+outside CI until D4, when P1's ownership fix put `tests/unit/intent/` in P2's
+lane (`docs/decisions/0006`) and they moved.
 
 ## Does the corpus actually execute?
 

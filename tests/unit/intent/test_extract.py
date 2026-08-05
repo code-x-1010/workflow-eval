@@ -16,9 +16,9 @@ import json
 from pathlib import Path
 
 import pytest
+from wfeval.core.ir import Spec
 
 from services.intent.src.extract import Refiner, extract
-from wfeval.core.ir import Spec
 
 ROOT = Path(__file__).resolve().parents[3]
 CORPUS = ROOT / "datasets" / "corpus"

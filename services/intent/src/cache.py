@@ -54,7 +54,10 @@ class DiskCache:
     stats: CacheStats = field(default_factory=CacheStats)
 
     def key(self, payload: str) -> str:
-        material = "\x00".join((self.namespace, self.version, payload))
+        # NUL-separated because it cannot occur in any of the three parts, so no
+        # pair of (namespace, version, payload) can run together into the same
+        # material string and collide. Byte-identical to the previous join form.
+        material = f"{self.namespace}\x00{self.version}\x00{payload}"
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     def path_for(self, payload: str) -> Path:

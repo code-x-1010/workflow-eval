@@ -11,8 +11,10 @@ request. Replace endpoint bodies with real logic; do not change the response
 SHAPES without a decision record.
 
 `WFEVAL_STUB_DEPS=0` (`make dev-real`) runs what is real so far: today that is
-`/v1/spec`'s deterministic extraction, disk-cached by content hash. Real output
-is thinner than the golden example on purpose -- see extract.py on residue.
+`/v1/spec`'s deterministic extraction plus the optional LLM residue pass, both
+behind one content-hash disk cache. Real output is thinner than the golden
+example on purpose -- see extract.py on residue, and refine.py on why a refined
+value must quote the prompt to survive.
 
 Three things are already real, and must stay real when the bodies are replaced:
 
@@ -32,22 +34,28 @@ from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
-
 from wfeval.core.ir import Spec
 from wfeval.core.stubs import golden, stubbing
 from wfeval.core.testcase import CaseKind
 
 from .cache import DiskCache
 from .extract import EXTRACTOR_VERSION, extract
+from .refine import cache_version, refiner_from_env
 
 app = FastAPI(title="wfeval-intent", version="0.1.0")
 
 SERVICE = "intent"
 OWNER = "P2"
 
-# Keyed by extractor version as well as prompt, so changing the rules does not
-# leave the cache serving specs from an extractor that no longer exists.
-SPEC_CACHE = DiskCache(namespace="spec", version=EXTRACTOR_VERSION)
+# None unless WFEVAL_SPEC_REFINER says otherwise -- there is no LLM client and no
+# API key in this repo, so on-by-default would mean a failed call per request.
+REFINER = refiner_from_env()
+
+# Keyed by *everything that produced the spec*, not just the prompt: the
+# extractor's rules and the refiner's identity both. Changing either while the
+# key stays the same means serving specs from a pipeline that no longer exists,
+# and you debug the old output for an hour before noticing.
+SPEC_CACHE = DiskCache(namespace="spec", version=cache_version(EXTRACTOR_VERSION, REFINER))
 
 Prompt = Annotated[str, Field(min_length=1, description="The user's natural-language request, verbatim.")]
 
@@ -109,16 +117,22 @@ def extract_spec(body: SpecRequest) -> dict[str, Any]:
     """Stubbed (the default) this returns the golden example, so anyone wiring
     against :8002 today gets the same fully-populated Spec every time.
 
-    `WFEVAL_STUB_DEPS=0` runs the real extractor: deterministic rules over the
-    prompt, disk-cached by sha256(prompt) + extractor version. The split
+    `WFEVAL_STUB_DEPS=0` runs the real pipeline: deterministic rules over the
+    prompt, then the refiner for the residue if one is wired, disk-cached by
+    sha256(prompt) + the version of everything that produced the spec. The split
     matches `make dev` vs `make dev-real` -- real output is thinner than the
     golden example on purpose (see extract.py on residue) and would otherwise
     surprise three agents who are building against the example.
+
+    The cache wraps `extract` **and** the refiner, which is what makes the
+    charter's D3-D4 bar mean anything: the same prompt twice is zero model calls
+    the second time, and a 40-case corpus re-run costs nothing after the first.
     """
     if stubbing():
         return _served("spec.response.json")
-    spec, _cached = SPEC_CACHE.get_or_compute(body.prompt, lambda: extract(body.prompt).model_dump())
-    # TODO(P2 D4): the Refiner pass for the residue, through this same cache.
+    spec, _cached = SPEC_CACHE.get_or_compute(
+        body.prompt, lambda: extract(body.prompt, REFINER).model_dump()
+    )
     # TODO(P2 D5): real SPEC-* sufficiency diagnostics (registry: docs/decisions/0008).
     return {"spec": spec, "sufficiency_diagnostics": []}
 
