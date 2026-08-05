@@ -22,8 +22,17 @@ def test_testcases_endpoint_rejects_artifact() -> None:
 
 
 def test_testgen_may_not_import_the_ast() -> None:
+    """The .importlinter contract for this is commented out until P2 builds
+    `services/intent/src/testgen/` (charter D9) -- it hard-fails lint-imports
+    ("Module ... does not exist") against a module that isn't real yet, which
+    broke `make contract`/CI for everyone. See decision 0013. This also fixed
+    a real bug in the contract itself: `intent.testgen` was never a valid
+    import path in this repo (services import as `services.<name>.src.*`,
+    not a bare top-level package) -- checking for the corrected path here
+    too, so a careless revert back to the broken path would be caught.
+    """
     cfg = (ROOT / ".importlinter").read_text()
-    assert "intent.testgen" in cfg and "wfeval.core.ast" in cfg, (
+    assert "services.intent.src.testgen" in cfg and "wfeval.core.ast" in cfg, (
         "The import-linter contract forbidding testgen -> ast has been removed or weakened."
     )
 
