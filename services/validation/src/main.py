@@ -3,24 +3,28 @@
 Service: validation  |  Port: 8001  |  Owner: P1
 Charter: docs/agents/P1-*.md      Contract: contracts/validation.openapi.yaml
 
-L1, L3 and L4 are real (see l1_schema.py, l3_structure.py, l4_soundness.py,
-l4_dataflow.py). L2 needs Sandbox's asset registry (D8) and still reports via
-tiers_skipped rather than pretending to run. L4 ships at `warning` severity
-only -- see l4_soundness.py's module docstring for why -- so it never sets a
-`gates` entry, only `scores`/`diagnostics`, same as L3.
+L1, L2, L3 and L4 are all real now (see l1_schema.py, l2_references.py,
+l3_structure.py, l4_soundness.py, l4_dataflow.py). L2 never hard-depends on
+Sandbox being up -- an unreachable asset registry reports via tiers_skipped
+rather than failing the request; see l2_references.py's module docstring.
+L4 ships at `warning` severity only -- see l4_soundness.py's module
+docstring for why -- so it never sets a `gates` entry, only
+`scores`/`diagnostics`, same as L3.
 Do not change the response SHAPES without a decision record.
 """
+import os
 from typing import Any
 
 from fastapi import FastAPI
 from wfeval.core.diagnostics import PREFIX_OWNER
 
-from . import l1_schema, l3_structure, l4_dataflow, l4_soundness
+from . import l1_schema, l2_references, l3_structure, l4_dataflow, l4_soundness
 
 app = FastAPI(title="wfeval-validation", version="0.1.0")
 
 SERVICE = "validation"
 OWNER = "P1"
+ASSETS_URL = os.environ.get("SANDBOX_URL", "http://sandbox:8003") + "/v1/assets"
 
 
 @app.get("/healthz")
@@ -58,7 +62,16 @@ def validate(body: dict[str, Any]) -> dict[str, Any]:
         return _report(gates, scores, diagnostics, ast_digest=None,
                         tiers_run=tiers_run, tiers_skipped=tiers_skipped)
 
-    tiers_skipped["L2"] = "not implemented until D8 (needs Sandbox's asset registry)"
+    if "L2" in requested_tiers:
+        l2_diagnostics, reference_integrity = l2_references.check(ast, assets_url=ASSETS_URL)
+        if reference_integrity is None:
+            tiers_skipped["L2"] = "asset registry unavailable"
+        else:
+            diagnostics.extend(d.model_dump(mode="json") for d in l2_diagnostics)
+            gates["reference_integrity"] = reference_integrity
+            tiers_run.append("L2")
+    else:
+        tiers_skipped["L2"] = "not requested"
 
     if "L3" in requested_tiers:
         l3_diagnostics = l3_structure.check(ast)

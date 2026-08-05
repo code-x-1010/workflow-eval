@@ -42,18 +42,38 @@ def test_validate_default_tiers_now_include_l4():
     L1/L3, but it never declares a writer for 'amount' via <uipath:variables>
     -- so L4 dataflow correctly flags the read in Gateway_amount's condition.
     This is a real, honest finding given the adapter's documented limitation
-    (see wfeval/adapters/bpmn.py), not a bug in the fixture or the check."""
+    (see wfeval/adapters/bpmn.py), not a bug in the fixture or the check.
+    It has no asset_ref anywhere, so L2 trivially passes rather than being
+    skipped -- there's nothing in it to check against Sandbox's registry."""
     resp = client.post("/v1/validate", json={
         "request_id": "r1b", "platform": "uipath_maestro",
         "artifact": {"format": "bpmn", "content": GOOD_BPMN},
     })
     body = resp.json()
-    assert set(body["tiers_run"]) == {"L1", "L3", "L4"}
-    assert set(body["tiers_skipped"]) == {"L2"}
+    assert set(body["tiers_run"]) == {"L1", "L2", "L3", "L4"}
+    assert body["tiers_skipped"] == {}
+    assert body["gates"]["reference_integrity"] is True
     codes = [d["code"] for d in body["diagnostics"]]
     assert codes == ["FLW-VARIABLE-NOT-ASSIGNED"]
     assert body["scores"]["process_soundness"] == 1.0
     assert body["scores"]["dataflow_correctness"] < 1.0
+
+
+def test_validate_l2_degrades_gracefully_when_sandbox_is_unreachable():
+    """adapter_rich.bpmn DOES reference real assets (ChargePayment,
+    NotifyVendor), so this exercises the actual HTTP call to Sandbox's
+    /v1/assets -- unreachable in the test environment (no such host), which
+    is exactly the "kill the sandbox container" scenario the charter
+    requires L2 to survive: still a 200, L2 just moves to tiers_skipped."""
+    resp = client.post("/v1/validate", json={
+        "request_id": "r1e", "platform": "uipath_maestro",
+        "artifact": {"format": "bpmn", "content": FULLY_CLEAN_BPMN},
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tiers_skipped"].get("L2") == "asset registry unavailable"
+    assert "reference_integrity" not in body["gates"]
+    assert "L2" not in body["tiers_run"]
 
 
 def test_validate_fully_clean_artifact_has_no_l4_findings():
