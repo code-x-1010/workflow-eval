@@ -15,6 +15,10 @@ openapi: 3.1.0
 # L2 depends on P3's asset registry (GET /v1/assets) but must never hard-fail
 # when Sandbox is down -- it degrades to `tiers_skipped.L2 = "<reason>"` and the
 # artifact proceeds. See docs/agents/P1-validation.md.
+#
+# `artifact.format: dmn` runs a completely separate two-tier path (L1, DMN)
+# instead of the four-tier BPMN ladder -- see the `DMN` ValidationTier entry
+# below and decision 0017.
 
 info:
   title: wfeval-validation
@@ -131,7 +135,15 @@ components:
 
     ValidationTier:
       type: string
-      enum: [L1, L2, L3, L4]
+      enum: [L1, L2, L3, L4, DMN]
+      description: |
+        L1-L4 apply to `artifact.format: bpmn`. `DMN` applies to
+        `artifact.format: dmn` instead -- a decision table has no element
+        graph, so L2 (references)/L3 (structure) don't apply, and its own
+        gap/overlap analysis (`DMN-*` diagnostics) isn't equivalent to L4
+        soundness/dataflow despite the similar warning-only severity. A DMN
+        artifact only ever produces `tiers_run`/`tiers_skipped` entries for
+        `L1` and `DMN`. See decision 0017.
 
     ValidateRequest:
       type: object
@@ -159,7 +171,10 @@ components:
           properties:
             tiers:
               type: array
-              description: Which tiers to run. Omitted means all four, subject to the internal short-circuit.
+              description: |
+                Which tiers to run. Omitted means all four (L1-L4) for a BPMN
+                artifact, subject to the internal short-circuit, or [L1, DMN]
+                for a DMN artifact.
               items: { $ref: "#/components/schemas/ValidationTier" }
               uniqueItems: true
               minItems: 1

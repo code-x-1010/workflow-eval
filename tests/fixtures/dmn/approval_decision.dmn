@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Clean DMN fixture, same invoice-approval story as the BPMN fixtures.
+     Two rules, complete coverage (every amount is either < 10000 or
+     >= 10000), no overlap. Used as the "this should have zero DMN-* findings"
+     baseline for gap/overlap analysis. -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="Defs_approval" name="Invoice Approval" namespace="http://uipath.com/maestro/dmn">
+  <decision id="Decision_approval" name="Approval Decision">
+    <decisionTable id="DecisionTable_approval" hitPolicy="UNIQUE">
+      <input id="Input_amount" label="Invoice amount">
+        <inputExpression id="InputExpression_amount" typeRef="number">
+          <text>amount</text>
+        </inputExpression>
+      </input>
+      <output id="Output_approved" label="Approved" name="approved" typeRef="boolean"/>
+      <rule id="Rule_low">
+        <inputEntry id="InputEntry_low">
+          <text>&lt; 10000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_low">
+          <text>true</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_high">
+        <inputEntry id="InputEntry_high">
+          <text>&gt;= 10000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_high">
+          <text>false</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

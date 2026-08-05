@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- L_DMN scope-limit fixture: uses FEEL range syntax ("[10000..20000)")
+     that dmn_analysis.py deliberately doesn't parse, exercising the
+     DMN-ANALYSIS-SKIPPED path rather than a wrong or noisy finding. -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="Defs_range" name="Approval With A Range" namespace="http://uipath.com/maestro/dmn">
+  <decision id="Decision_range" name="Approval Decision">
+    <decisionTable id="DecisionTable_range" hitPolicy="UNIQUE">
+      <input id="Input_amount" label="Invoice amount">
+        <inputExpression id="InputExpression_amount" typeRef="number">
+          <text>amount</text>
+        </inputExpression>
+      </input>
+      <output id="Output_approved" label="Approved" name="approved" typeRef="boolean"/>
+      <rule id="Rule_mid">
+        <inputEntry id="InputEntry_mid">
+          <text>[10000..20000)</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_mid">
+          <text>true</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_other">
+        <inputEntry id="InputEntry_other">
+          <text>-</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_other">
+          <text>false</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

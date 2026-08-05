@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- L_DMN gap fixture: amounts from 5000 up to (but not including) 10000
+     are covered by neither rule: a genuine gap in the decision table. -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="Defs_gap" name="Approval With A Gap" namespace="http://uipath.com/maestro/dmn">
+  <decision id="Decision_gap" name="Approval Decision">
+    <decisionTable id="DecisionTable_gap" hitPolicy="UNIQUE">
+      <input id="Input_amount" label="Invoice amount">
+        <inputExpression id="InputExpression_amount" typeRef="number">
+          <text>amount</text>
+        </inputExpression>
+      </input>
+      <output id="Output_approved" label="Approved" name="approved" typeRef="boolean"/>
+      <rule id="Rule_low">
+        <inputEntry id="InputEntry_low">
+          <text>&lt; 5000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_low">
+          <text>true</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_high">
+        <inputEntry id="InputEntry_high">
+          <text>&gt;= 10000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_high">
+          <text>false</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

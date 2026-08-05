@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[3]
 GOOD_BPMN = (ROOT / "tests/fixtures/spiff/executable_invoice.bpmn").read_text()
 PLANTED_DEFECT_BPMN = (ROOT / "contracts/examples/artifact.bpmn").read_text()
 FULLY_CLEAN_BPMN = (ROOT / "tests/fixtures/bpmn/adapter_rich.bpmn").read_text()
+CLEAN_DMN = (ROOT / "tests/fixtures/dmn/approval_decision.dmn").read_text()
+GAP_DMN = (ROOT / "tests/fixtures/dmn/gap_missing_middle_range.dmn").read_text()
 
 client = TestClient(app)
 
@@ -125,6 +127,47 @@ def test_validate_malformed_xml_short_circuits_l2_l3_l4():
     assert body["diagnostics"][0]["code"] == "SCH-PARSE-FAILED"
     assert body["tiers_run"] == ["L1"]
     assert set(body["tiers_skipped"]) == {"L2", "L3", "L4"}
+    assert body["ast_digest"] is None
+
+
+def test_validate_dmn_clean_artifact():
+    resp = client.post("/v1/validate", json={
+        "request_id": "r5", "platform": "uipath_maestro",
+        "artifact": {"format": "dmn", "content": CLEAN_DMN},
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["gates"]["schema_validity"] is True
+    assert body["diagnostics"] == []
+    assert set(body["tiers_run"]) == {"L1", "DMN"}
+    assert body["tiers_skipped"] == {}
+    assert body["scores"]["dmn_correctness"] == 1.0
+    assert body["ast_digest"].startswith("sha256:")
+
+
+def test_validate_dmn_flags_the_gap():
+    resp = client.post("/v1/validate", json={
+        "request_id": "r6", "platform": "uipath_maestro",
+        "artifact": {"format": "dmn", "content": GAP_DMN},
+    })
+    body = resp.json()
+    codes = [d["code"] for d in body["diagnostics"]]
+    assert codes == ["DMN-INPUT-GAP"]
+    assert body["scores"]["dmn_correctness"] < 1.0
+    # DMN artifacts never produce L2/L3 -- no element graph, those tiers don't apply
+    assert "L2" not in body["tiers_run"] and "L2" not in body["tiers_skipped"]
+
+
+def test_validate_dmn_malformed_xml_short_circuits_dmn_tier():
+    resp = client.post("/v1/validate", json={
+        "request_id": "r7", "platform": "uipath_maestro",
+        "artifact": {"format": "dmn", "content": "<not-dmn>"},
+    })
+    body = resp.json()
+    assert body["gates"]["schema_validity"] is False
+    assert body["diagnostics"][0]["code"] == "SCH-PARSE-FAILED"
+    assert body["tiers_run"] == ["L1"]
+    assert body["tiers_skipped"] == {"DMN": "not run: L1 failed to parse the artifact"}
     assert body["ast_digest"] is None
 
 
