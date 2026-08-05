@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- L4 soundness fixture: the classic XOR-split feeding an AND-join anti-pattern.
+     Gateway_choice only ever sends a token down ONE of its two outgoing flows
+     (it's exclusive), but Gateway_sync waits for a token on BOTH incoming
+     flows before it can fire (it's parallel). Whichever branch the run took,
+     the token on the branch NOT taken never arrives, so Gateway_sync can never
+     fire; the token on the branch that WAS taken is stuck forever, and the
+     process never reaches its end event. This is not caught by L3 (every
+     element IS reachable, every path from start COULD reach an end event on
+     paper); it's a soundness question, not a structure question, which is
+     exactly why L4 exists. See services/validation/src/l4_soundness.py. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="Defs_deadlock" targetNamespace="http://uipath.com/maestro">
+  <process id="Process_deadlock" isExecutable="true">
+    <startEvent id="StartEvent_1" name="Start"/>
+
+    <exclusiveGateway id="Gateway_choice" name="Pick a branch" default="Flow_to_a"/>
+
+    <serviceTask id="Task_a" name="Branch A"/>
+    <serviceTask id="Task_b" name="Branch B"/>
+
+    <parallelGateway id="Gateway_sync" name="Wait for both branches"/>
+
+    <serviceTask id="Task_after_sync" name="Runs after both branches join"/>
+
+    <endEvent id="EndEvent_1" name="Done"/>
+
+    <sequenceFlow id="Flow_start_to_choice" sourceRef="StartEvent_1" targetRef="Gateway_choice"/>
+    <sequenceFlow id="Flow_to_a" sourceRef="Gateway_choice" targetRef="Task_a"/>
+    <sequenceFlow id="Flow_to_b" sourceRef="Gateway_choice" targetRef="Task_b">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">false</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="Flow_a_to_sync" sourceRef="Task_a" targetRef="Gateway_sync"/>
+    <sequenceFlow id="Flow_b_to_sync" sourceRef="Task_b" targetRef="Gateway_sync"/>
+    <sequenceFlow id="Flow_sync_to_after" sourceRef="Gateway_sync" targetRef="Task_after_sync"/>
+    <sequenceFlow id="Flow_after_to_end" sourceRef="Task_after_sync" targetRef="EndEvent_1"/>
+  </process>
+</definitions>

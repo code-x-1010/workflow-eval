@@ -10,6 +10,7 @@ from services.validation.src.main import app
 ROOT = Path(__file__).resolve().parents[3]
 GOOD_BPMN = (ROOT / "tests/fixtures/spiff/executable_invoice.bpmn").read_text()
 PLANTED_DEFECT_BPMN = (ROOT / "contracts/examples/artifact.bpmn").read_text()
+FULLY_CLEAN_BPMN = (ROOT / "tests/fixtures/bpmn/adapter_rich.bpmn").read_text()
 
 client = TestClient(app)
 
@@ -24,6 +25,7 @@ def test_validate_clean_artifact_passes_l1_and_l3():
     resp = client.post("/v1/validate", json={
         "request_id": "r1", "platform": "uipath_maestro",
         "artifact": {"format": "bpmn", "content": GOOD_BPMN},
+        "options": {"tiers": ["L1", "L3"]},
     })
     assert resp.status_code == 200
     body = resp.json()
@@ -33,6 +35,52 @@ def test_validate_clean_artifact_passes_l1_and_l3():
     assert set(body["tiers_run"]) == {"L1", "L3"}
     assert set(body["tiers_skipped"]) == {"L2", "L4"}
     assert body["ast_digest"].startswith("sha256:")
+
+
+def test_validate_default_tiers_now_include_l4():
+    """GOOD_BPMN (tests/fixtures/spiff/executable_invoice.bpmn) is clean for
+    L1/L3, but it never declares a writer for 'amount' via <uipath:variables>
+    -- so L4 dataflow correctly flags the read in Gateway_amount's condition.
+    This is a real, honest finding given the adapter's documented limitation
+    (see wfeval/adapters/bpmn.py), not a bug in the fixture or the check."""
+    resp = client.post("/v1/validate", json={
+        "request_id": "r1b", "platform": "uipath_maestro",
+        "artifact": {"format": "bpmn", "content": GOOD_BPMN},
+    })
+    body = resp.json()
+    assert set(body["tiers_run"]) == {"L1", "L3", "L4"}
+    assert set(body["tiers_skipped"]) == {"L2"}
+    codes = [d["code"] for d in body["diagnostics"]]
+    assert codes == ["FLW-VARIABLE-NOT-ASSIGNED"]
+    assert body["scores"]["process_soundness"] == 1.0
+    assert body["scores"]["dataflow_correctness"] < 1.0
+
+
+def test_validate_fully_clean_artifact_has_no_l4_findings():
+    """adapter_rich.bpmn declares every variable it reads, dominated by its
+    writer -- confirms L4 doesn't false-positive on a well-formed artifact."""
+    resp = client.post("/v1/validate", json={
+        "request_id": "r1c", "platform": "uipath_maestro",
+        "artifact": {"format": "bpmn", "content": FULLY_CLEAN_BPMN},
+    })
+    body = resp.json()
+    assert body["diagnostics"] == []
+    assert body["scores"]["process_soundness"] == 1.0
+    assert body["scores"]["dataflow_correctness"] == 1.0
+
+
+def test_validate_flags_a_deadlock():
+    content = (ROOT / "tests/fixtures/bpmn/deadlock_xor_split_and_join.bpmn").read_text()
+    resp = client.post("/v1/validate", json={
+        "request_id": "r1d", "platform": "uipath_maestro",
+        "artifact": {"format": "bpmn", "content": content},
+    })
+    body = resp.json()
+    codes = [d["code"] for d in body["diagnostics"]]
+    assert any(c in ("FLW-DEAD-TRANSITION", "FLW-NOT-SOUND") for c in codes)
+    assert all(d["severity"] == "warning" for d in body["diagnostics"])  # L4 never blocks a gate
+    assert body["scores"]["process_soundness"] < 1.0
+    assert "process_soundness" not in body["gates"]  # L4 never adds a gate, only scores/diagnostics
 
 
 def test_validate_flags_the_planted_gateway_defect():

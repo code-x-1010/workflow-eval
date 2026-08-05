@@ -15,7 +15,7 @@ import sys
 
 LANES: dict[str, list[str]] = {
     "P1": ["packages/", "services/validation/", "services/gateway/",
-           ".github/", "Makefile", "pyproject.toml", ".importlinter", "CODEOWNERS", "scripts/",
+           ".github/", "Makefile", "pyproject.toml", ".importlinter", "CODEOWNERS", "scripts/", "Dockerfile",
            "tests/unit/core/", "tests/unit/adapters/", "tests/unit/validation/", "tests/unit/gateway/"],
     "P2": ["services/intent/", "datasets/", "tests/unit/intent/"],
     "P3": ["services/sandbox/", "sandbox-infra/", "tests/unit/sandbox/"],
