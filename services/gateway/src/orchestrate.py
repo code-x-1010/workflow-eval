@@ -43,6 +43,8 @@ from wfeval.core.report import (
     Verdict,
 )
 
+from . import webhook
+
 VALIDATION_URL = os.environ.get("VALIDATION_URL", "http://validation:8001")
 INTENT_URL = os.environ.get("INTENT_URL", "http://intent:8002")
 SANDBOX_URL = os.environ.get("SANDBOX_URL", "http://sandbox:8003")
@@ -54,8 +56,18 @@ _HTTP_TIMEOUT_S = 30.0
 # In-memory evaluation_id -> EvaluationReport (JSON-mode dumped). Same
 # rationale and same limitation as services/sandbox/src/main.py's
 # _EXECUTIONS: fine for a single-process dev service, not durable across a
-# restart -- a real store is D9 hardening, not needed before then.
+# restart. Still in-memory even after D9 hardening below -- a durable store
+# is orthogonal to idempotency and not needed to satisfy the charter's D9
+# "done when" (replaying request_id returns the cached report).
 _EVALUATIONS: dict[str, dict[str, Any]] = {}
+
+# request_id -> evaluation_id. D9 idempotency: per the contract
+# ("Idempotent on request_id: replaying the same request_id returns the
+# cached evaluation_id for the original run rather than starting a second
+# one"), keyed on request_id alone -- the contract doesn't ask us to also
+# compare artifact content, so we don't; a caller reusing a request_id with
+# a different artifact gets the *first* run's result, by design.
+_REQUEST_ID_INDEX: dict[str, str] = {}
 
 
 class DependencyUnavailable(Exception):
@@ -127,10 +139,25 @@ async def run_full_evaluation(request: dict[str, Any]) -> str:
     """POST /v1/evaluations: full pipeline, computed synchronously (see
     module docstring), stashed under a fresh evaluation_id. Returns the id;
     callers get it back immediately via the 202 response and poll
-    GET /v1/evaluations/{id}."""
+    GET /v1/evaluations/{id}.
+
+    Idempotent on request_id (D9, decision 0018): a request_id already seen
+    returns the original evaluation_id immediately, without re-running the
+    pipeline (no second Sandbox deploy, no second webhook delivery)."""
+    request_id = request.get("request_id")
+    if request_id and request_id in _REQUEST_ID_INDEX:
+        return _REQUEST_ID_INDEX[request_id]
+
     evaluation_id = f"ev_{uuid.uuid4().hex[:8]}"
     report = await _run_full_pipeline(request, evaluation_id=evaluation_id)
     _EVALUATIONS[evaluation_id] = report.model_dump(mode="json")
+    if request_id:
+        _REQUEST_ID_INDEX[request_id] = evaluation_id
+
+    callback_url = request.get("callback_url")
+    if callback_url:
+        await webhook.deliver(callback_url, report)
+
     return evaluation_id
 
 

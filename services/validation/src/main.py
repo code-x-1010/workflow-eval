@@ -10,6 +10,14 @@ rather than failing the request; see l2_references.py's module docstring.
 L4 ships at `warning` severity only -- see l4_soundness.py's module
 docstring for why -- so it never sets a `gates` entry, only
 `scores`/`diagnostics`, same as L3.
+
+`artifact.format == "dmn"` takes a completely different path (see
+`_validate_dmn` below) -- a decision table has no L2/L3 equivalent (no
+element graph, no references to an asset registry), so it only ever runs
+`L1` (parse) and `DMN` (gap/overlap analysis, dmn_analysis.py). `DMN` was
+added to the shared `ValidationTier` enum in contracts/validation.openapi.yaml
+for this -- see decision 0017.
+
 Do not change the response SHAPES without a decision record.
 """
 import os
@@ -18,7 +26,7 @@ from typing import Any
 from fastapi import FastAPI
 from wfeval.core.diagnostics import PREFIX_OWNER
 
-from . import l1_schema, l2_references, l3_structure, l4_dataflow, l4_soundness
+from . import dmn_analysis, l1_schema, l2_references, l3_structure, l4_dataflow, l4_soundness
 
 app = FastAPI(title="wfeval-validation", version="0.1.0")
 
@@ -36,8 +44,13 @@ def healthz() -> dict[str, str]:
 def validate(body: dict[str, Any]) -> dict[str, Any]:
     artifact = body.get("artifact") or {}
     content: str = artifact.get("content", "")
+    fmt: str = artifact.get("format", "bpmn")
     platform: str = body.get("platform", "uipath_maestro")
-    requested_tiers: list[str] = (body.get("options") or {}).get("tiers") or ["L1", "L2", "L3", "L4"]
+    default_tiers = ["L1", "DMN"] if fmt == "dmn" else ["L1", "L2", "L3", "L4"]
+    requested_tiers: list[str] = (body.get("options") or {}).get("tiers") or default_tiers
+
+    if fmt == "dmn":
+        return _validate_dmn(content, requested_tiers)
 
     diagnostics: list[dict[str, Any]] = []
     gates: dict[str, bool] = {}
@@ -93,6 +106,38 @@ def validate(body: dict[str, Any]) -> dict[str, Any]:
         tiers_skipped["L4"] = "not requested"
 
     return _report(gates, scores, diagnostics, ast_digest=ast.digest,
+                    tiers_run=tiers_run, tiers_skipped=tiers_skipped)
+
+
+def _validate_dmn(content: str, requested_tiers: list[str]) -> dict[str, Any]:
+    diagnostics: list[dict[str, Any]] = []
+    gates: dict[str, bool] = {}
+    scores: dict[str, float] = {}
+    tiers_run: list[str] = []
+    tiers_skipped: dict[str, str] = {}
+
+    model, l1_diagnostics, schema_validity = dmn_analysis.check_schema(content)
+    diagnostics.extend(d.model_dump(mode="json") for d in l1_diagnostics)
+    if "L1" in requested_tiers:
+        tiers_run.append("L1")
+        gates["schema_validity"] = schema_validity
+    else:
+        tiers_skipped["L1"] = "not requested"
+
+    if model is None:
+        tiers_skipped.setdefault("DMN", "not run: L1 failed to parse the artifact")
+        return _report(gates, scores, diagnostics, ast_digest=None,
+                        tiers_run=tiers_run, tiers_skipped=tiers_skipped)
+
+    if "DMN" in requested_tiers:
+        dmn_diagnostics = dmn_analysis.check(model)
+        diagnostics.extend(d.model_dump(mode="json") for d in dmn_diagnostics)
+        scores["dmn_correctness"] = dmn_analysis.score(dmn_diagnostics)
+        tiers_run.append("DMN")
+    else:
+        tiers_skipped["DMN"] = "not requested"
+
+    return _report(gates, scores, diagnostics, ast_digest=model.digest,
                     tiers_run=tiers_run, tiers_skipped=tiers_skipped)
 
 

@@ -6,7 +6,7 @@ in each downstream service instead.
 from __future__ import annotations
 
 from typing import Any, Self
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from wfeval.core.report import ValidationReport
@@ -17,6 +17,20 @@ from services.gateway.src.orchestrate import DependencyUnavailable
 
 DEPLOY_ACCEPTED = {"accepted": True, "diagnostics": []}
 DEPLOY_REJECTED = {"accepted": False, "diagnostics": []}
+
+
+@pytest.fixture(autouse=True)
+def _reset_gateway_state():
+    """D9 idempotency (decision 0018) keys off request_id in a module-level
+    dict, and most tests here reuse the same REQUEST fixture's request_id --
+    without this, the second+ test to call run_full_evaluation(REQUEST)
+    would just get the first test's cached result back, which is correct
+    idempotency behavior but wrong test isolation."""
+    orchestrate._EVALUATIONS.clear()
+    orchestrate._REQUEST_ID_INDEX.clear()
+    yield
+    orchestrate._EVALUATIONS.clear()
+    orchestrate._REQUEST_ID_INDEX.clear()
 
 ALL_GATES_OK_ROUTES: dict[str, Any] = {
     "http://validation:8001/v1/validate": golden("validation.response.json"),
@@ -130,6 +144,56 @@ async def test_full_pipeline_short_circuits_on_deploy_rejection():
     assert stored["short_circuited_at"] == "deploy"
     assert stored["execution"] is None
     assert "http://sandbox:8003/v1/executions" not in calls  # step 3 never runs
+
+
+@pytest.mark.asyncio
+async def test_replaying_request_id_is_idempotent():
+    """D9 (decision 0018): a second call with the same request_id must not
+    re-run the pipeline -- verified by asserting the fake transport is only
+    ever hit once, not just that the returned id matches."""
+    calls: list[str] = []
+    with patch("services.gateway.src.orchestrate.httpx.AsyncClient", _fake_client(ALL_GATES_OK_ROUTES, calls)):
+        first_id = await orchestrate.run_full_evaluation(REQUEST)
+        calls_after_first = len(calls)
+        second_id = await orchestrate.run_full_evaluation(REQUEST)
+
+    assert second_id == first_id
+    assert len(calls) == calls_after_first  # no new HTTP calls on the replay
+
+
+@pytest.mark.asyncio
+async def test_different_request_ids_both_run():
+    calls: list[str] = []
+    other_request = {**REQUEST, "request_id": "req_other"}
+    with patch("services.gateway.src.orchestrate.httpx.AsyncClient", _fake_client(ALL_GATES_OK_ROUTES, calls)):
+        first_id = await orchestrate.run_full_evaluation(REQUEST)
+        second_id = await orchestrate.run_full_evaluation(other_request)
+    assert first_id != second_id
+
+
+@pytest.mark.asyncio
+async def test_callback_url_triggers_webhook_delivery(monkeypatch):
+    monkeypatch.setenv("GATEWAY_WEBHOOK_SECRET", "shh")
+    request_with_callback = {**REQUEST, "callback_url": "https://example.com/hook"}
+    calls: list[str] = []
+    with (
+        patch("services.gateway.src.orchestrate.httpx.AsyncClient", _fake_client(ALL_GATES_OK_ROUTES, calls)),
+        patch("services.gateway.src.orchestrate.webhook.deliver", new=AsyncMock(return_value=True)) as mock_deliver,
+    ):
+        await orchestrate.run_full_evaluation(request_with_callback)
+    mock_deliver.assert_awaited_once()
+    assert mock_deliver.await_args.args[0] == "https://example.com/hook"
+
+
+@pytest.mark.asyncio
+async def test_no_callback_url_never_calls_webhook():
+    calls: list[str] = []
+    with (
+        patch("services.gateway.src.orchestrate.httpx.AsyncClient", _fake_client(ALL_GATES_OK_ROUTES, calls)),
+        patch("services.gateway.src.orchestrate.webhook.deliver", new=AsyncMock()) as mock_deliver,
+    ):
+        await orchestrate.run_full_evaluation(REQUEST)
+    mock_deliver.assert_not_awaited()
 
 
 @pytest.mark.asyncio

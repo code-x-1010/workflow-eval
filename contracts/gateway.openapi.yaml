@@ -44,6 +44,16 @@ servers:
   - url: http://localhost:8000
     description: local / docker-compose
 
+security:
+  - ApiKeyAuth: []
+
+# D9 hardening (decision 0018): every route except /healthz requires
+# X-Api-Key -- but only when the operator has actually configured
+# GATEWAY_API_KEYS. Unset, the Gateway runs open (matches every other
+# service in this repo, none of which have auth yet). This `security`
+# block describes the hardened shape a real deployment should reach, not a
+# guarantee that every environment enforces it -- see services/gateway/src/auth.py.
+
 tags:
   - name: predeploy
     description: Sync, sub-2s. The blocking pre-deployment gate.
@@ -57,6 +67,7 @@ paths:
       tags: [ops]
       summary: Liveness.
       operationId: healthz
+      security: []  # never requires X-Api-Key -- load balancers/orchestrators need this open
       responses:
         "200":
           description: Service is up.
@@ -154,6 +165,13 @@ paths:
                   detail: { type: string }
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: See the top-level `security` note and services/gateway/src/auth.py.
+
   responses:
     ValidationError:
       description: Request body failed schema validation.

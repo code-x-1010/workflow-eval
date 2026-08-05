@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- L_DMN overlap fixture: hitPolicy UNIQUE, but amounts from 8000 to 10000
+     match BOTH rules (Rule_low's "< 10000" and Rule_high's ">= 8000"
+     overlap), ambiguous under UNIQUE, which requires exactly one match. -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="Defs_overlap" name="Approval With Overlap" namespace="http://uipath.com/maestro/dmn">
+  <decision id="Decision_overlap" name="Approval Decision">
+    <decisionTable id="DecisionTable_overlap" hitPolicy="UNIQUE">
+      <input id="Input_amount" label="Invoice amount">
+        <inputExpression id="InputExpression_amount" typeRef="number">
+          <text>amount</text>
+        </inputExpression>
+      </input>
+      <output id="Output_approved" label="Approved" name="approved" typeRef="boolean"/>
+      <rule id="Rule_low">
+        <inputEntry id="InputEntry_low">
+          <text>&lt; 10000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_low">
+          <text>true</text>
+        </outputEntry>
+      </rule>
+      <rule id="Rule_high">
+        <inputEntry id="InputEntry_high">
+          <text>&gt;= 8000</text>
+        </inputEntry>
+        <outputEntry id="OutputEntry_high">
+          <text>false</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>
