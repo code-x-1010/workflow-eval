@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- L4 dataflow fixture: 'risk_score' is written on the high-value branch
+     (Task_flag_high) but NOT on the low-value branch (Task_autopay). Both
+     branches merge into Task_review, which reads 'risk_score' unconditionally.
+     Structurally this is perfectly fine (L3 is clean: one start, no dead
+     ends, the gateway has a default flow); it's only a problem once you ask
+     "is risk_score guaranteed to be set on every path that reaches
+     Task_review", which is exactly the question L4 dataflow answers via CFG
+     dominance. See services/validation/src/l4_dataflow.py. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:uipath="http://uipath.com/schema/maestro"
+             id="Defs_dataflow_gap" targetNamespace="http://uipath.com/maestro">
+  <process id="Process_dataflow_gap" isExecutable="true">
+    <startEvent id="StartEvent_1" name="Start"/>
+
+    <serviceTask id="Task_extract" name="Extract invoice amount">
+      <extensionElements>
+        <uipath:variables>
+          <uipath:write name="amount"/>
+        </uipath:variables>
+      </extensionElements>
+    </serviceTask>
+
+    <exclusiveGateway id="Gateway_amount" name="Amount over threshold?" default="Flow_low"/>
+
+    <serviceTask id="Task_flag_high" name="Flag as high risk">
+      <extensionElements>
+        <uipath:variables>
+          <uipath:write name="risk_score"/>
+        </uipath:variables>
+      </extensionElements>
+    </serviceTask>
+
+    <serviceTask id="Task_autopay" name="Auto-pay (low value, no risk check)"/>
+
+    <userTask id="Task_review" name="Review">
+      <extensionElements>
+        <uipath:variables>
+          <uipath:read name="risk_score"/>
+        </uipath:variables>
+      </extensionElements>
+    </userTask>
+
+    <endEvent id="EndEvent_1" name="Done"/>
+
+    <sequenceFlow id="Flow_start_to_extract" sourceRef="StartEvent_1" targetRef="Task_extract"/>
+    <sequenceFlow id="Flow_extract_to_gateway" sourceRef="Task_extract" targetRef="Gateway_amount"/>
+    <sequenceFlow id="Flow_high" sourceRef="Gateway_amount" targetRef="Task_flag_high" name="over">
+      <conditionExpression xsi:type="tFormalExpression">amount &gt; 10000</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="Flow_low" sourceRef="Gateway_amount" targetRef="Task_autopay" name="under"/>
+    <sequenceFlow id="Flow_high_to_review" sourceRef="Task_flag_high" targetRef="Task_review"/>
+    <sequenceFlow id="Flow_low_to_review" sourceRef="Task_autopay" targetRef="Task_review"/>
+    <sequenceFlow id="Flow_review_to_end" sourceRef="Task_review" targetRef="EndEvent_1"/>
+  </process>
+</definitions>

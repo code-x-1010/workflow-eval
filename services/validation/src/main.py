@@ -3,9 +3,11 @@
 Service: validation  |  Port: 8001  |  Owner: P1
 Charter: docs/agents/P1-*.md      Contract: contracts/validation.openapi.yaml
 
-L1 and L3 are real (see l1_schema.py, l3_structure.py). L2 needs Sandbox's
-asset registry (D8) and L4 needs the BPMN -> workflow-net soundness pass
-(D6-D7) -- both still report via tiers_skipped rather than pretending to run.
+L1, L3 and L4 are real (see l1_schema.py, l3_structure.py, l4_soundness.py,
+l4_dataflow.py). L2 needs Sandbox's asset registry (D8) and still reports via
+tiers_skipped rather than pretending to run. L4 ships at `warning` severity
+only -- see l4_soundness.py's module docstring for why -- so it never sets a
+`gates` entry, only `scores`/`diagnostics`, same as L3.
 Do not change the response SHAPES without a decision record.
 """
 from typing import Any
@@ -13,7 +15,7 @@ from typing import Any
 from fastapi import FastAPI
 from wfeval.core.diagnostics import PREFIX_OWNER
 
-from . import l1_schema, l3_structure
+from . import l1_schema, l3_structure, l4_dataflow, l4_soundness
 
 app = FastAPI(title="wfeval-validation", version="0.1.0")
 
@@ -66,7 +68,16 @@ def validate(body: dict[str, Any]) -> dict[str, Any]:
     else:
         tiers_skipped["L3"] = "not requested"
 
-    tiers_skipped["L4"] = "not implemented until D6-D7 (soundness + dataflow)"
+    if "L4" in requested_tiers:
+        l4_soundness_diagnostics = l4_soundness.check(ast)
+        l4_dataflow_diagnostics = l4_dataflow.check(ast)
+        diagnostics.extend(d.model_dump(mode="json") for d in l4_soundness_diagnostics)
+        diagnostics.extend(d.model_dump(mode="json") for d in l4_dataflow_diagnostics)
+        scores["process_soundness"] = l4_soundness.score(l4_soundness_diagnostics)
+        scores["dataflow_correctness"] = l4_dataflow.score(l4_dataflow_diagnostics)
+        tiers_run.append("L4")
+    else:
+        tiers_skipped["L4"] = "not requested"
 
     return _report(gates, scores, diagnostics, ast_digest=ast.digest,
                     tiers_run=tiers_run, tiers_skipped=tiers_skipped)
