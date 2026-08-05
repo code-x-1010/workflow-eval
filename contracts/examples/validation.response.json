@@ -1,6 +1,7 @@
 {
   "gates": {
-    "schema_validity": true
+    "schema_validity": true,
+    "reference_integrity": true
   },
   "scores": {
     "structural_soundness": 0.9786,
@@ -18,8 +19,6 @@
     }
   ],
   "ast_digest": "sha256:debed69e7be5f16857b8706a2b361fa7d783e4868e83021858d8ee4d7e74272c",
-  "tiers_run": ["L1", "L3", "L4"],
-  "tiers_skipped": {
-    "L2": "not implemented until D8 (needs Sandbox's asset registry)"
-  }
+  "tiers_run": ["L1", "L2", "L3", "L4"],
+  "tiers_skipped": {}
 }
