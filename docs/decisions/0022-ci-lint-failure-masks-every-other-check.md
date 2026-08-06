@@ -1,0 +1,154 @@
+# 0022 — CI's lint step fails, and it has been masking every other check in the pipeline
+
+**Author:** P2   **Date:** 2026-08-06   **Status:** proposed   **Affects:** P1, P3, P4
+
+## Context
+
+Three findings about `.github/workflows/ci.yml`. They are one record because they
+share a consequence: **nobody can currently tell what CI is actually verifying.**
+
+None of this is in P2's lane. All of it is reported, not fixed.
+
+### 1. The `quality` job fails at step 1 of 5
+
+The lint step is:
+
+```yaml
+- name: lint
+  run: uv run ruff check . && uv run mypy --strict packages services
+```
+
+Ruff passes. Mypy does not. Run on `bb30200` (current `main`), with the same
+`uv` and the same command CI uses:
+
+```
+$ PYTHONPATH=packages/wfeval-core/src:packages/wfeval-adapters/src:. \
+    uv run mypy --strict packages services
+Found 29 errors in 9 files (checked 50 source files)
+```
+
+Per owner:
+
+| Errors | Location | Owner |
+|---|---|---|
+| 26 | `services/sandbox/**` | P3 |
+| 3 | `services/cost/src/main.py` | P4 |
+| 0 | `packages/**`, `services/{validation,gateway,intent}/**` | — |
+
+Mostly `Missing type arguments for generic type "dict"` / `"list"`. This is
+pre-existing debt, not a regression: P3's 2026-08-04 handoff already describes it
+("after forcing `--explicit-package-bases` it exposes pre-existing strict typing
+debt across sandbox files"). A 30th error in `services/intent/src/main.py`,
+introduced when the DMN adapter widened `parse()` to `WorkflowAST | DecisionModel`,
+was P2's and is fixed in `629996c`.
+
+**GitHub Actions stops a job at the first failed step.** Lint is step 1, so
+steps 2–5 have never run on any push or pull request:
+
+```
+2. import boundaries (incl. testgen anti-circularity)   ← never runs
+3. unit                                                  ← never runs
+4. contract                                              ← never runs
+5. diagnostic code ownership                             ← never runs
+```
+
+Two of those matter more than the others:
+
+- **The anti-circularity import contract has never gated a merge.** P2's charter
+  calls it "the single most important correctness property in this project", and
+  enforcement leg 2 is `.importlinter`. `0010` found it had never run at all;
+  `0013` authorised turning it on; it went live in `710d458` and passes locally.
+  It has still never run in CI, because the job dies two steps earlier. The
+  property is currently guarded by one agent remembering to run `lint-imports`.
+- **`make contract` cannot be observed.** AGENTS.md §5 declares a red `make
+  contract` a stop-work event from D3 onward. In CI it is step 4. Nobody has seen
+  its result.
+
+### 2. The nightly corpus job can never run
+
+```yaml
+on: [push, pull_request]          # no `schedule:` trigger
+...
+corpus:
+  if: github.event_name == 'schedule'
+```
+
+`github.event_name` can only ever be `push` or `pull_request`, so the job is
+permanently skipped. `0018` reported this job as permanently red because
+`scripts/run_corpus.py` did not exist; P1 has since written the script, but the
+job still never executes. It went from red to invisible, which is worse — a
+skipped job reports no failure.
+
+### 3. `uv.lock` is not tracked, so CI resolves dependencies fresh every run
+
+`uv.lock` is absent from `HEAD` and absent from `.gitignore`. Its history:
+added in `7ee8402` (P2, D5), deleted in `710d458` (P2, D8+D9). Both are P2
+commits and neither mentions it, so the deletion looks like an accident of a
+`git add`/`rm` rather than a decision — recorded here so it is not re-litigated
+as one.
+
+The effect is that `uv sync --all-extras` re-resolves from `pyproject.toml`'s
+`>=` bounds on every CI run. That is the exact failure mode of `0017`, where an
+unpinned ruff turned CI lint red with no code change. Ruff is now pinned
+(`ruff==0.16.1`), but pydantic, fastapi, mypy, pm4py and SpiffWorkflow all still
+float, so CI can go red from an upstream release at any time.
+
+## Decision
+
+P2 proposes the following. **P2 cannot implement any of it** — `.github/`,
+`pyproject.toml`, `services/sandbox/**` and `services/cost/**` are all outside
+P2's lane.
+
+1. **Make the pipeline non-masking (P1).** One owner's typing debt must not be
+   able to hide another owner's broken contract. Either split the steps into
+   separate jobs, or add `if: ${{ !cancelled() }}` to steps 2–5 so they report
+   independently of lint. Splitting is preferred: the job names then say which
+   guarantee is broken.
+2. **Clear the strict-typing debt (P3: 26, P4: 3).** Each owner runs
+   `uv run mypy --strict services/<theirs>` in their own lane. Neither should
+   touch the other's, per AGENTS.md.
+3. **Fix or remove the corpus trigger (P1).** Add a `schedule:` entry to `on:`,
+   or delete the job. A job that cannot run should not be in the file implying
+   coverage that does not exist.
+4. **Decide `uv.lock` deliberately (P1).** Commit it, or add it to `.gitignore`
+   so it cannot be re-committed by accident. Either is defensible; the current
+   state — untracked, un-ignored, regenerated by any `uv` invocation — is the one
+   that is not, because it lands in the next `git add -A` somebody runs.
+
+Items 1 and 3 are small. Item 2 is the one with real work in it, and it is the
+one blocking everything else.
+
+## Consequences
+
+- Until item 1 lands, **a green CI badge means "ruff passed"** and nothing more.
+  Anyone reading CI as evidence that tests, contracts or import boundaries hold
+  is reading it wrong. This should be said at standup, because it is the kind of
+  thing that gets discovered during an integration failure in week 2.
+- Once lint stops masking, expect steps 2–5 to reveal further failures that have
+  been accumulating unobserved. Local runs are green for P2 (421 unit + contract
+  tests, both `lint-imports` contracts kept, `check-ownership` clean), and P1
+  reports 414 green repo-wide, so the likely outcome is that they pass — but that
+  is an inference from local runs, not an observation of CI.
+- Item 2 is a prerequisite for item 1 being useful: reordering the steps without
+  clearing the debt just moves the red.
+- `check-ownership` is deliberately not in CI (AGENTS.md assigns it to CODEOWNERS
+  at review plus the local make target). Not proposing a change; noting it so the
+  omission is not mistaken for part of this bug.
+
+### Note on the number of this record
+
+`0022` was chosen by the procedure in `docs/decisions/README.md` — max prefix
+across every remote and local ref after `git fetch --all --prune`, which is
+`0021`. Flagging while here: **`0017`, `0018`, `0019` and `0020` each exist
+twice**, one from P1 and one from P2, so citing "decision 0018" is currently
+ambiguous between "`run_corpus.py` does not exist" and "Gateway hardening D9".
+`0011` raised exactly this after the first collision and is still `proposed`.
+Four more have accumulated since. Renumbering is P1's call; this record does not
+propose one.
+
+## Sign-off
+
+- [x] P2 — reported; the one `services/intent` error is fixed in `629996c`
+- [ ] P1 — owns `.github/workflows/ci.yml` and `pyproject.toml`; items 1, 3, 4
+- [ ] P3 — 26 mypy errors in `services/sandbox/**`; item 2
+- [ ] P4 — 3 mypy errors in `services/cost/src/main.py`; item 2
