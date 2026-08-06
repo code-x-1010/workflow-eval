@@ -42,7 +42,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 log = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class LLMJudge:
         "unsure answer is handled; a confident wrong one is not."
     )
 
-    SCHEMA: dict[str, Any] = {
+    SCHEMA: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "verdict": {"type": "string", "enum": ["match", "no_match", "unsure"]},

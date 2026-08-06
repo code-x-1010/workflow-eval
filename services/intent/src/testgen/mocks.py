@@ -107,7 +107,7 @@ def failure_mock_for(spec: Spec) -> list[MockDefinition]:
     """
     if spec.error_behaviour is None or not spec.integrations:
         return []
-    integration = sorted(set(spec.integrations))[0]
+    integration = min(set(spec.integrations))
     host, path, method, _ = _ENDPOINTS.get(integration, _FALLBACK)
     return [MockDefinition(
         host=host, path=path, method=method, status=500,

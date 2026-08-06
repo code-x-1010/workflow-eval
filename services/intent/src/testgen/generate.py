@@ -170,7 +170,7 @@ def _adversarial(spec: Spec, shared: list[Assertion], stubs: list[Any]) -> list[
             case_id="tc_000",
             kind=CaseKind.ADVERSARIAL,
             description=(
-                f"The {sorted(set(spec.integrations))[0]!r} integration returns 500. The prompt "
+                f"The {min(set(spec.integrations))!r} integration returns 500. The prompt "
                 f"says: {spec.error_behaviour!r}."
             ),
             input=base,
