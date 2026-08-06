@@ -35,6 +35,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+
 from wfeval.adapters import AdapterParseError, parse
 from wfeval.core.diagnostics import Diagnostic, Severity
 from wfeval.core.ir import Spec

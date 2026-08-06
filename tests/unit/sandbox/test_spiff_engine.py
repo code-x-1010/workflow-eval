@@ -8,9 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from wfeval.core.testcase import Assertion, AssertionType, CaseKind, TaskStub, TestCase
 
 from services.sandbox.src.runners.spiff.engine import run_case
+from wfeval.core.testcase import Assertion, AssertionType, CaseKind, TaskStub, TestCase
 
 FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "spiff" / "executable_invoice.bpmn"
 

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from wfeval.core.testcase import TaskStub
-
 from services.sandbox.src.runners.spiff.stubs import TaskStubResolver
+from wfeval.core.testcase import TaskStub
 
 
 def test_resolves_by_element_id_and_cycles_per_invocation():

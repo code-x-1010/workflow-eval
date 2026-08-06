@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+from services.sandbox.src.runners.assertions import evaluate
 from wfeval.core.testcase import Assertion, AssertionType, CaseKind, TestCase
 from wfeval.core.trace import Trace
-
-from services.sandbox.src.runners.assertions import evaluate
 
 
 def _trace(path: list[str], variables: dict | None = None, status: str = "completed") -> Trace:
