@@ -41,6 +41,7 @@ from typing import Any
 import pm4py
 from pm4py.objects.petri_net.obj import Marking, PetriNet
 from pm4py.objects.petri_net.utils import petri_utils
+
 from wfeval.core.ast import ElementKind, WorkflowAST
 from wfeval.core.diagnostics import Diagnostic, Severity
 

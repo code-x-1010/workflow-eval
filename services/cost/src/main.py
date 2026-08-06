@@ -8,6 +8,7 @@ blocked on you. Replace endpoint bodies with real logic; do not change the
 response SHAPES without a decision record.
 """
 from fastapi import FastAPI
+
 from wfeval.core.stubs import golden
 
 app = FastAPI(title="wfeval-cost", version="0.1.0")

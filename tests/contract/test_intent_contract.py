@@ -210,16 +210,24 @@ def test_a_score_never_ships_without_its_agreement_rate() -> None:
 
 
 def test_nothing_prompt_derived_imports_the_artifact_side() -> None:
-    """Leg 2 of the anti-circularity guarantee, done statically here because it
-    is not being done anywhere else today: `.importlinter` contract 2 names the
-    module `intent.testgen`, which is not importable under any root package the
-    config declares, so import-linter reports "module does not exist" and the
-    contract never runs. See docs/decisions/0010 -- P1 owns that file.
+    """Leg 2 of the anti-circularity guarantee.
 
-    This scan is not a replacement for the import-linter contract (it does not
-    follow transitive imports). It is what stops the guarantee being purely
-    decorative in the meantime.
+    **Updated at D8, when the real contract finally started running.** This test
+    was written at D3 as a stand-in: `.importlinter` contract 2 was commented out
+    because its `source_modules` did not exist yet, so nothing enforced the rule
+    and a text scan was better than nothing. Building `services/intent/src/testgen/`
+    made the module real, and adding `services` to the config's `root_packages`
+    made it visible to import-linter -- which now reports the contract as KEPT and,
+    when deliberately broken, names the offending file and line.
+
+    So this is belt-and-braces now rather than the only belt, and it is checked
+    the way it should always have been: over the **parsed import statements**, not
+    over the raw text. The text scan tripped on `testgen/__init__.py`'s own
+    docstring, which exists to explain that the import is forbidden -- a check that
+    fails on its own documentation trains people to delete the documentation.
     """
+    import ast as python_ast
+
     forbidden = ("wfeval.core.ast", "wfeval.adapters", "wfeval.core.trace")
     src = ROOT / "services" / "intent" / "src"
     prompt_derived = sorted(list(src.glob("testgen/**/*.py")) + [src / "extract.py", src / "cache.py"])
@@ -228,13 +236,35 @@ def test_nothing_prompt_derived_imports_the_artifact_side() -> None:
     for path in prompt_derived:
         if not path.exists():
             continue
-        text = path.read_text()
-        for module in forbidden:
-            assert module not in text, (
-                f"{path.relative_to(ROOT)} references {module}. Test generation and Spec "
-                f"extraction derive from the PROMPT alone; reading the artifact makes the "
-                f"execution tier a tautology. Express it semantically instead."
-            )
+        tree = python_ast.parse(path.read_text())
+        imported: list[str] = []
+        for node in python_ast.walk(tree):
+            if isinstance(node, python_ast.Import):
+                imported.extend(alias.name for alias in node.names)
+            elif isinstance(node, python_ast.ImportFrom) and node.module:
+                imported.append(node.module)
+        for module in imported:
+            for banned in forbidden:
+                assert not (module == banned or module.startswith(banned + ".")), (
+                    f"{path.relative_to(ROOT)} imports {module}. Test generation and Spec "
+                    f"extraction derive from the PROMPT alone; reading the artifact makes the "
+                    f"execution tier a tautology. Express it semantically instead."
+                )
+
+
+def test_the_import_linter_contract_is_live_not_commented_out() -> None:
+    """The stand-in above exists because this contract once did not run. It runs
+    now, and this asserts it stays that way -- a commented-out contract looks
+    identical to a passing one in CI output."""
+    cfg = (ROOT / ".importlinter").read_text()
+    body = "\n".join(line for line in cfg.splitlines() if not line.lstrip().startswith("#"))
+    assert "[importlinter:contract:2]" in body, "contract 2 has been commented out again"
+    assert "services.intent.src.testgen" in body
+    assert "wfeval.core.ast" in body.split("[importlinter:contract:2]")[1]
+    assert "services" in body.split("[importlinter:contract:1]")[0], (
+        "`services` was removed from root_packages, so contract 2 silently stops "
+        'resolving and import-linter reports "module does not exist"'
+    )
 
 
 def test_served_app_matches_the_frozen_contracts_surface() -> None:

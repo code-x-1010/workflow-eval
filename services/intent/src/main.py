@@ -47,6 +47,7 @@ from .extract import EXTRACTOR_VERSION, extract
 from .judge import calibrate, judge_from_env
 from .refine import cache_version, refiner_from_env
 from .sufficiency import SUFFICIENCY_VERSION, diagnose
+from .testgen import generate
 
 log = logging.getLogger(__name__)
 
@@ -273,5 +274,12 @@ def testcases(body: TestCasesRequest) -> dict[str, Any]:
     # Belt and braces. TestCasesRequest forbids extras, so an artifact is
     # rejected with a 422 before this runs; this fires if that is ever relaxed.
     assert "artifact" not in body.model_dump(), "testcases must never receive the artifact"
-    # TODO(P2 D8-D9): generate from body.prompt / body.spec, honouring body.kinds.
-    return _served("testcases.response.json")
+    if stubbing():
+        return _served("testcases.response.json")
+
+    spec = body.spec or extract(body.prompt, REFINER)
+    cases, mocks = generate(spec, body.prompt, body.kinds)
+    return {
+        "test_cases": [c.model_dump() for c in cases],
+        "mocks": [m.model_dump() for m in mocks],
+    }
