@@ -96,7 +96,17 @@ def _now_ms() -> int:
 
 
 def _artifact_body(request: dict[str, Any]) -> dict[str, Any]:
-    return {"format": request.get("format", "bpmn"), "content": request["content"]}
+    """Reads the nested `artifact: {format, content}` shape the contract
+    (contracts/gateway.openapi.yaml's ArtifactSubmission) actually defines,
+    same as Validation's own main.py. This was previously reading `format`/
+    `content` as flat top-level request fields -- contradicting the
+    published contract and every real client (and this file's own module
+    docstring's claim that no branch special-cases stub/real mode; nothing
+    stubbed this, it was just wrong) -- found while writing the D10
+    integration guide's sample client against the real contract. See
+    docs/handoff/P1.md, 2026-08-06 entry."""
+    artifact = request.get("artifact") or {}
+    return {"format": artifact.get("format", "bpmn"), "content": artifact.get("content", "")}
 
 
 async def run_predeploy_validate(request: dict[str, Any]) -> EvaluationReport:
@@ -200,12 +210,32 @@ async def _run_full_pipeline(request: dict[str, Any], *, evaluation_id: str) -> 
         )
 
     # Stage 3: Sandbox executions, consuming stage 2's test cases.
+    #
+    # /v1/executions is 202-shaped per contracts/sandbox.openapi.yaml -- the
+    # POST returns {execution_id, poll_url}, not the report itself (kept
+    # 202-shaped for contract parity with a future UiPath runner; Sandbox's
+    # own main.py already computes the report synchronously and stores it
+    # before returning, since Spiff is seconds-fast). This used to skip the
+    # GET entirely and try to parse the POST's {execution_id, poll_url} as
+    # an ExecutionReport directly -- a real bug, found while building the
+    # D10 integration guide's sample client against live services (mocked
+    # HTTP-layer tests never caught it because the mock routes only ever
+    # returned golden("execution.response.json") for BOTH the POST and any
+    # GET, regardless of shape). See docs/handoff/P1.md, 2026-08-06 entry.
+    #
+    # One GET immediately after POST is correct for today's synchronous-
+    # underneath Sandbox; a real async runner that can still be "running" on
+    # first GET would need an actual poll loop here, which is out of scope
+    # for the same reason decision 0018 scoped out a real async queue --
+    # nothing in this repo to build or test that against yet.
     t2 = _now_ms()
-    execution_raw = await _call("POST", SANDBOX_URL, "/v1/executions", json_body={
+    deploy_response = await _call("POST", SANDBOX_URL, "/v1/executions", json_body={
         "artifact": artifact,
         "test_cases": testcases_raw.get("test_cases", []),
         "mocks": testcases_raw.get("mocks", []),
     })
+    execution_id = deploy_response["execution_id"]
+    execution_raw = await _call("GET", SANDBOX_URL, f"/v1/executions/{execution_id}")
     timings["execution"] = _now_ms() - t2
     execution = ExecutionReport.model_validate(execution_raw)
 

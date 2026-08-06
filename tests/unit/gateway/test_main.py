@@ -15,7 +15,10 @@ from services.gateway.src.orchestrate import DependencyUnavailable
 
 client = TestClient(app)
 
-REQUEST = {"request_id": "req_test", "platform": "uipath_maestro", "format": "bpmn", "content": "<definitions/>", "prompt": "do the thing"}
+REQUEST = {
+    "request_id": "req_test", "platform": "uipath_maestro",
+    "artifact": {"format": "bpmn", "content": "<definitions/>"}, "prompt": "do the thing",
+}
 
 _REPORT = EvaluationReport(
     evaluation_id="ev_test", request_id="req_test", platform="uipath_maestro",
