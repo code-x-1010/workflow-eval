@@ -62,7 +62,7 @@ def test_real_mode_returns_sufficiency_diagnostics(real_mode: None) -> None:
 
 def test_an_under_specified_prompt_earns_several(real_mode: None) -> None:
     body = client.post("/v1/spec", json={"prompt": "Process refunds and update the ledger."}).json()
-    codes = set(d["code"] for d in body["sufficiency_diagnostics"])
+    codes = {d["code"] for d in body["sufficiency_diagnostics"]}
     assert {"SPEC-NO-TRIGGER", "SPEC-NO-ERROR-BEHAVIOUR", "SPEC-NO-BUDGET"} <= codes
 
 

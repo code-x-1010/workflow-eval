@@ -30,18 +30,25 @@ Three things are already real, and must stay real when the bodies are replaced:
 """
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from wfeval.adapters import AdapterParseError, parse
+from wfeval.core.diagnostics import Diagnostic, Severity
 from wfeval.core.ir import Spec
 from wfeval.core.stubs import golden, stubbing
 from wfeval.core.testcase import CaseKind
 
+from .align import align
 from .cache import DiskCache
 from .extract import EXTRACTOR_VERSION, extract
+from .judge import calibrate, judge_from_env
 from .refine import cache_version, refiner_from_env
 from .sufficiency import SUFFICIENCY_VERSION, diagnose
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(title="wfeval-intent", version="0.1.0")
 
@@ -60,6 +67,17 @@ SPEC_CACHE = DiskCache(
     namespace="spec",
     version=f"{cache_version(EXTRACTOR_VERSION, REFINER)}/{SUFFICIENCY_VERSION}",
 )
+
+# Whatever decides the fuzzy residue, and how much it agrees with the answer key.
+# Calibrated once at import rather than per request: with the default lexical
+# judge it is pure computation over a committed file, and with an LLM judge it
+# would be 54 model calls that must not happen on the request path.
+JUDGE = judge_from_env()
+CALIBRATION = calibrate(JUDGE)
+if not CALIBRATION.trustworthy:
+    # The charter's "say so loudly". It is also a diagnostic on every report --
+    # a log line nobody reads is not loud.
+    log.warning("intent judge %s: %s", CALIBRATION.judge, CALIBRATION.warning)
 
 Prompt = Annotated[str, Field(min_length=1, description="The user's natural-language request, verbatim.")]
 
@@ -161,9 +179,88 @@ def _spec_response(prompt: str) -> dict[str, Any]:
 
 @app.post("/v1/intent")
 def intent(body: IntentRequest) -> dict[str, Any]:
-    # TODO(P2 D6-D7): deterministic Spec<->AST diff, then judge for the residue.
-    # Never ship scores without judge_agreement.
-    return _served("intent.response.json")
+    """Deterministic Spec x AST diff, with the judge reserved for the residue.
+
+    The one P2 endpoint that receives the artifact. Alignment lives in align.py,
+    outside `testgen/`, and that separation is the anti-circularity guarantee.
+
+    **A score never ships without `judge_agreement`.** The contract encodes it as
+    an `if/then` and this endpoint satisfies it by construction: the number comes
+    from a real calibration run against `datasets/golden/`, and when it is below
+    the trustworthy bar the report also carries `INT-JUDGE-UNCALIBRATED` so the
+    caveat travels with the number rather than sitting in a log.
+    """
+    if stubbing():
+        return _served("intent.response.json")
+
+    try:
+        ast = parse(body.artifact)
+    except AdapterParseError as exc:
+        # 422 rather than a zero-scored report. Scoring an unparseable artifact
+        # as badly-aligned would attribute an adapter limitation to the
+        # generator's output quality -- see docs/decisions/0020, where five
+        # corpus artifacts hit exactly this.
+        raise HTTPException(status_code=422, detail=f"artifact could not be parsed: {exc}") from exc
+
+    own = extract(body.prompt, REFINER)
+    spec = body.spec or own
+    result = align(spec, ast, body.prompt)
+
+    diagnostics = list(result.diagnostics)
+    if body.spec is not None:
+        diagnostics.extend(_spec_drift(body.spec, own))
+    if not CALIBRATION.trustworthy:
+        diagnostics.append(Diagnostic(
+            code="INT-JUDGE-UNCALIBRATED",
+            severity=Severity.WARNING,
+            message=(
+                f"The judge deciding ambiguous step matches ({CALIBRATION.judge}) agrees with the "
+                f"calibration set on {CALIBRATION.agreement:.0%} of {CALIBRATION.n} pairs. "
+                f"{CALIBRATION.warning}"
+            ),
+            suggested_fix="Read intent_coverage as indicative until a calibrated judge is configured.",
+            element_id=None,
+            locator=None,
+        ))
+
+    return {
+        "scores": result.scores,
+        "diagnostics": [d.model_dump() for d in diagnostics],
+        "judge_agreement": CALIBRATION.agreement,
+        "spec_source": spec.source,
+    }
+
+
+def _spec_drift(supplied: Spec, own: Spec) -> list[Diagnostic]:
+    """The charter's obligation when the generation team supplies their Spec:
+    use theirs, and additionally report theirs versus ours.
+
+    `info`, because neither reading is authoritative. A disagreement about what
+    the prompt meant is a question for a human, not a defect -- and P2's own
+    extraction is precision-first and under-populated by design, so "they found
+    more than we did" is the expected case, not a finding.
+    """
+    drift = []
+    if supplied.trigger != own.trigger and own.trigger is not None:
+        drift.append(f"trigger: theirs {supplied.trigger!r} vs ours {own.trigger!r}")
+    theirs = {b.expression_hint for b in supplied.branches if b.expression_hint}
+    ours = {b.expression_hint for b in own.branches if b.expression_hint}
+    if ours - theirs:
+        drift.append(f"branch conditions we found and they did not: {sorted(ours - theirs)}")
+    if supplied.budget_per_instance != own.budget_per_instance and own.budget_per_instance is not None:
+        drift.append(
+            f"budget: theirs {supplied.budget_per_instance} vs ours {own.budget_per_instance}"
+        )
+    if not drift:
+        return []
+    return [Diagnostic(
+        code="INT-SPEC-DRIFT",
+        severity=Severity.INFO,
+        message="The supplied Spec disagrees with the one extracted from the same prompt. " + "; ".join(drift),
+        suggested_fix="Reconcile the two readings of the prompt before treating either as intent.",
+        element_id=None,
+        locator=None,
+    )]
 
 
 @app.post("/v1/testcases")

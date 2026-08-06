@@ -38,7 +38,6 @@ from __future__ import annotations
 import networkx as nx
 from lark import Lark, Token, Tree
 from lark.exceptions import LarkError
-
 from wfeval.core.ast import WorkflowAST
 from wfeval.core.diagnostics import Diagnostic, Severity
 
