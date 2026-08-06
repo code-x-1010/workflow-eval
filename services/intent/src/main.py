@@ -36,7 +36,7 @@ from typing import Annotated, Any, Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from wfeval.adapters import AdapterParseError, parse
+from wfeval.adapters import AdapterParseError, parse_bpmn
 from wfeval.core.diagnostics import Diagnostic, Severity
 from wfeval.core.ir import Spec
 from wfeval.core.stubs import golden, stubbing
@@ -196,7 +196,14 @@ def intent(body: IntentRequest) -> dict[str, Any]:
         return _served("intent.response.json")
 
     try:
-        ast = parse(body.artifact)
+        # `parse_bpmn`, not the dispatching `parse`: this endpoint's `artifact` is
+        # a bare XML string, and `parse()`'s union return (`WorkflowAST |
+        # DecisionModel`, added with the DMN adapter) is only ever the DMN half
+        # for a dict input, which `IntentRequest` forbids. Naming the BPMN parser
+        # keeps the type exact instead of adding an unreachable isinstance guard.
+        # Aligning a spec against a decision table would be meaningless anyway --
+        # a decision table has no steps, no trigger and no ordering.
+        ast = parse_bpmn(body.artifact)
     except AdapterParseError as exc:
         # 422 rather than a zero-scored report. Scoring an unparseable artifact
         # as badly-aligned would attribute an adapter limitation to the

@@ -235,6 +235,21 @@ def test_an_unparseable_artifact_is_422_not_a_zero_score(real_mode: None) -> Non
     assert "could not be parsed" in response.json()["detail"]
 
 
+def test_a_dmn_decision_model_is_422_not_an_empty_alignment(real_mode: None) -> None:
+    """A decision table has no steps, no trigger and no ordering, so aligning a
+    spec against one would report every step missing and score ~0 -- attributing
+    an adapter behaviour to output quality, as above.
+
+    It is rejected at the parser rather than by a kind check: `IntentRequest.artifact`
+    is a bare string, and the dispatching `parse()` only returns a `DecisionModel`
+    for a dict. Pinned because the safety here is a *consequence* of two other
+    choices rather than a check anyone wrote, and either could move."""
+    dmn = (Path(__file__).resolve().parents[2] / "fixtures/dmn/approval_decision.dmn").read_text()
+    response = client.post("/v1/intent", json={"prompt": PROMPT, "artifact": dmn})
+    assert response.status_code == 422
+    assert "could not be parsed" in response.json()["detail"]
+
+
 def test_a_supplied_spec_is_used_and_its_drift_reported(real_mode: None) -> None:
     """The charter: use theirs, and additionally report theirs versus ours."""
     theirs = Spec(
