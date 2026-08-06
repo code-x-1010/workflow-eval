@@ -48,7 +48,22 @@ def test_real_mode_extracts_from_the_prompt(real_mode: None) -> None:
     assert spec["trigger"] == "an invoice arrives by email"
     assert spec["budget_per_instance"] == 0.50
     assert spec["source"] == "extracted"
-    assert body["sufficiency_diagnostics"] == [], "SPEC-* codes are D5, and an empty list says so honestly"
+
+
+def test_real_mode_returns_sufficiency_diagnostics(real_mode: None) -> None:
+    """D5 over the wire. The golden prompt states its trigger, its threshold and
+    its budget, and it pays a real invoice -- but it never says what happens when
+    paying one fails. That is the single code it earns, and it is the right one."""
+    body = client.post("/v1/spec", json={"prompt": PROMPT}).json()
+    codes = [d["code"] for d in body["sufficiency_diagnostics"]]
+    assert codes == ["SPEC-NO-ERROR-BEHAVIOUR"], codes
+    assert all(d["severity"] in {"warning", "info"} for d in body["sufficiency_diagnostics"])
+
+
+def test_an_under_specified_prompt_earns_several(real_mode: None) -> None:
+    body = client.post("/v1/spec", json={"prompt": "Process refunds and update the ledger."}).json()
+    codes = set(d["code"] for d in body["sufficiency_diagnostics"])
+    assert {"SPEC-NO-TRIGGER", "SPEC-NO-ERROR-BEHAVIOUR", "SPEC-NO-BUDGET"} <= codes
 
 
 def test_real_mode_varies_with_the_prompt(real_mode: None) -> None:

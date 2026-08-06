@@ -41,6 +41,7 @@ from wfeval.core.testcase import CaseKind
 from .cache import DiskCache
 from .extract import EXTRACTOR_VERSION, extract
 from .refine import cache_version, refiner_from_env
+from .sufficiency import SUFFICIENCY_VERSION, diagnose
 
 app = FastAPI(title="wfeval-intent", version="0.1.0")
 
@@ -51,11 +52,14 @@ OWNER = "P2"
 # API key in this repo, so on-by-default would mean a failed call per request.
 REFINER = refiner_from_env()
 
-# Keyed by *everything that produced the spec*, not just the prompt: the
-# extractor's rules and the refiner's identity both. Changing either while the
-# key stays the same means serving specs from a pipeline that no longer exists,
-# and you debug the old output for an hour before noticing.
-SPEC_CACHE = DiskCache(namespace="spec", version=cache_version(EXTRACTOR_VERSION, REFINER))
+# Keyed by *everything that produced the response*, not just the prompt: the
+# extractor's rules, the refiner's identity, and the sufficiency rules. Changing
+# any of them while the key stays the same means serving output from a pipeline
+# that no longer exists, and you debug the old output for an hour before noticing.
+SPEC_CACHE = DiskCache(
+    namespace="spec",
+    version=f"{cache_version(EXTRACTOR_VERSION, REFINER)}/{SUFFICIENCY_VERSION}",
+)
 
 Prompt = Annotated[str, Field(min_length=1, description="The user's natural-language request, verbatim.")]
 
@@ -130,11 +134,29 @@ def extract_spec(body: SpecRequest) -> dict[str, Any]:
     """
     if stubbing():
         return _served("spec.response.json")
-    spec, _cached = SPEC_CACHE.get_or_compute(
-        body.prompt, lambda: extract(body.prompt, REFINER).model_dump()
-    )
-    # TODO(P2 D5): real SPEC-* sufficiency diagnostics (registry: docs/decisions/0008).
-    return {"spec": spec, "sufficiency_diagnostics": []}
+    body_out, _cached = SPEC_CACHE.get_or_compute(body.prompt, lambda: _spec_response(body.prompt))
+    return body_out
+
+
+def _spec_response(prompt: str) -> dict[str, Any]:
+    """Extract, refine, then diagnose -- cached as one unit.
+
+    Diagnostics run **after** refinement, on the spec that is actually served.
+    That is deliberate and it is the only defensible order: a `SPEC-*` code is a
+    claim about what the response contains, so a refiner that legitimately
+    recovers a trigger from the prompt must also silence `SPEC-NO-TRIGGER`.
+    Diagnosing the pre-refinement draft would ship a spec with a trigger next to
+    a diagnostic saying it has none.
+
+    `diagnose()` gets the prompt too, because most of these are properties of the
+    wording that the Spec does not preserve -- see sufficiency.py on why reading
+    an empty Spec field is not the same as reading an under-specified prompt.
+    """
+    spec = extract(prompt, REFINER)
+    return {
+        "spec": spec.model_dump(),
+        "sufficiency_diagnostics": [d.model_dump() for d in diagnose(prompt, spec)],
+    }
 
 
 @app.post("/v1/intent")
