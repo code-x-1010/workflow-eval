@@ -24,6 +24,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI
+
 from wfeval.core.diagnostics import PREFIX_OWNER
 
 from . import dmn_analysis, l1_schema, l2_references, l3_structure, l4_dataflow, l4_soundness

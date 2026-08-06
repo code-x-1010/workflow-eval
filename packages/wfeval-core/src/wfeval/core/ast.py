@@ -22,6 +22,12 @@ class ElementKind(str, Enum):
     GATEWAY_INCLUSIVE = "gateway_inclusive"
     TIMER = "timer"
     SUBPROCESS = "subprocess"
+    INTERMEDIATE_EVENT = "intermediate_event"  # non-timer catch/throw/boundary event;
+    # see docs/decisions/0021 -- the definition kind (error/message/signal/escalation)
+    # lives in Element.attributes, not as its own ElementKind member, same way TIMER's
+    # duration/date/cycle value does. Deliberately NOT reused for TIMER's own tag:
+    # l3_structure.py's _timers() keys off kind == TIMER to require a timer value, and
+    # would misfire STR-TIMER-MISSING-VALUE on every one of these if it did.
 
 
 class LoopSpec(BaseModel):

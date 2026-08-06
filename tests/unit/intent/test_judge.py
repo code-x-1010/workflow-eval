@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from wfeval.core.ir import Spec, Step
 
 from services.intent.src import main
 from services.intent.src.judge import (
@@ -27,6 +26,7 @@ from services.intent.src.judge import (
     judge_from_env,
     load_calibration_set,
 )
+from wfeval.core.ir import Spec, Step
 
 ROOT = Path(__file__).resolve().parents[3]
 

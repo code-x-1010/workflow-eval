@@ -51,13 +51,12 @@ for path in (ROOT, ROOT / "packages" / "wfeval-core" / "src", ROOT / "packages" 
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from wfeval.adapters import AdapterParseError, parse
-
 from services.intent.src.align import align
 from services.intent.src.extract import extract
 from services.intent.src.judge import LexicalJudge, calibrate
 from services.intent.src.sufficiency import diagnose
 from services.intent.src.testgen import generate
+from wfeval.adapters import AdapterParseError, parse
 
 CORPUS = ROOT / "datasets" / "corpus"
 

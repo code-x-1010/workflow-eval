@@ -42,6 +42,7 @@ from SpiffWorkflow.bpmn.parser import BpmnParser
 from SpiffWorkflow.bpmn.workflow import BpmnWorkflow
 from SpiffWorkflow.exceptions import SpiffWorkflowException
 from SpiffWorkflow.task import TaskState
+
 from wfeval.core.diagnostics import Diagnostic, Severity
 from wfeval.core.testcase import MockDefinition, TestCase
 from wfeval.core.trace import Actuals, ElementEvent, RunnerFidelity, Trace

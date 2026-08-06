@@ -17,6 +17,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import FastAPI
+
 from wfeval.core.diagnostics import Diagnostic, Severity
 from wfeval.core.report import ExecutionReport, ExecutionResult
 from wfeval.core.stubs import golden

@@ -13,11 +13,11 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from wfeval.core.ir import BranchCondition, DataField, Spec, Step
 
 from services.intent.src import refine
 from services.intent.src.extract import extract
 from services.intent.src.refine import LLMRefiner, Refinement, cache_version, merge
+from wfeval.core.ir import BranchCondition, DataField, Spec, Step
 
 PROMPT = (
     "When an invoice arrives by email, extract the vendor and the amount. "

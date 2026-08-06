@@ -17,10 +17,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from wfeval.adapters import parse
-from wfeval.core.ir import BranchCondition, DataField, Spec, Step
 
 from services.intent.src.align import align
+from wfeval.adapters import parse
+from wfeval.core.ir import BranchCondition, DataField, Spec, Step
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT / "datasets") not in sys.path:

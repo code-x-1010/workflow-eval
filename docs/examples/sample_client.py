@@ -111,7 +111,7 @@ def cmd_serve_webhook(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     class Handler(http.server.BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802 (stdlib's naming convention, not ours)
+        def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
             signature = self.headers.get(SIGNATURE_HEADER, "")

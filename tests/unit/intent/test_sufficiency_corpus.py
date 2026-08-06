@@ -20,10 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from wfeval.core.diagnostics import Severity
 
 from services.intent.src.extract import extract
 from services.intent.src.sufficiency import diagnose
+from wfeval.core.diagnostics import Severity
 
 ROOT = Path(__file__).resolve().parents[3]
 CORPUS = ROOT / "datasets" / "corpus"

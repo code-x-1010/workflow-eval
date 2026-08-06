@@ -16,13 +16,13 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from wfeval.core.ir import BranchCondition, DataField, Spec, Step
-from wfeval.core.testcase import AssertionType, CaseKind
 
 from services.intent.src.testgen import generate
 from services.intent.src.testgen.boundaries import all_boundaries, boundaries_for, step_for
 from services.intent.src.testgen.invariants import DEFAULT_MAX_TASK_EXECUTIONS, max_executions_from
 from services.intent.src.testgen.mocks import mocks_for, task_stubs_for
+from wfeval.core.ir import BranchCondition, DataField, Spec, Step
+from wfeval.core.testcase import AssertionType, CaseKind
 
 PROMPT = (
     "When an invoice arrives by email, extract the vendor and the amount. "

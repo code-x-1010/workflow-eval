@@ -81,8 +81,16 @@ denominator as 35, and say why.
   boundary events, and P2's D2 note already records `c15` failing to parse in
   base Spiff for an unrelated reason (`businessRuleTask`).
 
+## Addendum, 2026-08-06 (P1)
+
+Picked option 1, not option 2 — see `docs/decisions/0021` for why option 2
+(reuse `TIMER`) turned out to be unsafe (collides with `l3_structure.py`'s
+`_timers()` check) once actually checked against every current `ElementKind`
+consumer. Added `ElementKind.INTERMEDIATE_EVENT` instead. All 5 corpus
+artifacts parse now; full detail and verification in `0021`.
+
 ## Sign-off
 
 - [x] P2
-- [ ] P1 — owner of the adapter and of `ElementKind`; pick 1, 2 or 3
+- [x] P1 — `ElementKind.INTERMEDIATE_EVENT` added; see `0021`
 - [ ] P3 — awareness: same 5 artifacts, possibly the same class of problem in the runner

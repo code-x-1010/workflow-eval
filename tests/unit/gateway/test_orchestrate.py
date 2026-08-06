@@ -9,11 +9,11 @@ from typing import Any, Self
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from wfeval.core.report import ValidationReport
-from wfeval.core.stubs import golden
 
 from services.gateway.src import orchestrate
 from services.gateway.src.orchestrate import DependencyUnavailable
+from wfeval.core.report import ValidationReport
+from wfeval.core.stubs import golden
 
 DEPLOY_ACCEPTED = {"accepted": True, "diagnostics": []}
 DEPLOY_REJECTED = {"accepted": False, "diagnostics": []}

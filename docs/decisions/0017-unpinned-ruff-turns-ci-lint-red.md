@@ -92,8 +92,43 @@ Two separate causes, worth keeping apart:
   lint rules for four agents is a bigger call than unbreaking the build, and it
   belongs to whoever owns the config.
 
+## Addendum, 2026-08-06 (P1)
+
+Pinned `ruff==0.16.1` and added `known-first-party = ["wfeval"]`. As predicted
+in this record's own Consequences section, that second line didn't just fix
+`services/validation/`'s two `I001`s — it moved `wfeval.*` into its own import
+group everywhere, which surfaced 19 more `I001`s across files that mix
+`wfeval` imports with third-party ones. Ran `ruff check --fix` scoped to
+exactly the files in P1's lane (`packages/`, `services/gateway/`,
+`services/validation/`, `tests/unit/{adapters,core,gateway,validation}/`,
+`docs/examples/sample_client.py`) — 19 fixed. Also fixed
+`docs/examples/sample_client.py`'s `EXE001` (`chmod +x`) and `RUF100` (a
+`noqa` ruff 0.16.1 no longer needs).
+
+`services/cost/src/main.py`'s `I001` (P4) was already clean — nothing to do
+there.
+
+**Addendum 2, same day:** left the remaining 14 `I001`s (P2's
+`datasets/run_alignment.py`, `services/intent/**`, `tests/unit/intent/**`;
+P3's `services/sandbox/**`, `tests/unit/sandbox/**`) for their owners, per
+`AGENTS.md` §2. PR #13's `ci / quality` check went red on push — CI's
+`ruff check .` runs repo-wide, not per-lane, so those 14 blocked *this* PR's
+merge even though none of them are in its diff. The repo owner asked
+explicitly for these to be fixed too rather than waiting on two more PRs, so
+ran the identical mechanical `ruff check --fix` (import reordering only, no
+logic touched, 414 tests still green after) across those 14 files and
+committed it. **This is a deliberate, explicitly-authorized exception** to
+"only fix your own lane" — `AGENT=P1 check-ownership` correctly flags this
+commit as touching P2's and P3's lanes, and that flag is accurate, not a bug
+to silence. Not proposing this as a new pattern; the default is still what
+this record already says (each owner fixes their own `I001`s).
+
 ## Sign-off
 
 - [x] P2
-- [ ] P1 — the pin and the `known-first-party` line; also the two `I001`s in `services/validation/`
-- [ ] P4 — the one `I001` in `services/cost/src/main.py`
+- [x] P1 — pin, `known-first-party`, all 33 `I001`/`EXE001`/`RUF100` fixed
+      (19 in P1's own lane; 14 more in P2's/P3's lanes, by explicit request,
+      to unblock PR #13 — see addendum 2)
+- [x] P2 — done by P1, by request; nothing further needed
+- [x] P3 — done by P1, by request; nothing further needed
+- [x] P4 — awareness only, nothing to do (already clean)

@@ -13,10 +13,9 @@ narrowings bought.
 """
 from __future__ import annotations
 
-from wfeval.core.diagnostics import Severity
-
 from services.intent.src.extract import extract
 from services.intent.src.sufficiency import diagnose
+from wfeval.core.diagnostics import Severity
 
 
 def codes(prompt: str) -> set[str]:

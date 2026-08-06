@@ -18,11 +18,16 @@ KNOWN v1 LIMITATIONS (fail loudly via AdapterParseError rather than silently
 mis-modelling -- see tests/fixtures/bpmn/adapter_rich.bpmn and
 docs/handoff/P1.md, 2026-08-03 entry, for what IS covered):
 
-- Only `timerEventDefinition` is understood on intermediate/boundary events.
-  Message, error, signal and escalation events have no ElementKind to map to
-  yet (the enum is frozen) -- raises rather than dropping the element, since
-  a silently-dropped task/event would corrupt L3 reachability far worse than
-  a loud parse failure would.
+- `timerEventDefinition`, `errorEventDefinition`, `messageEventDefinition`,
+  `signalEventDefinition` and `escalationEventDefinition` are understood on
+  intermediate/boundary events. Timer maps to `ElementKind.TIMER` as before;
+  the other four all map to `ElementKind.INTERMEDIATE_EVENT`, one shared kind
+  rather than one member each, with the definition kind, and (for a boundary
+  event) the task it watches and whether it interrupts it, recorded in
+  `Element.attributes` -- see docs/decisions/0021. An event with none of the
+  five still raises rather than dropping the element, since a silently-dropped
+  task/event would corrupt L3 reachability far worse than a loud parse failure
+  would.
 - `callActivity` is not supported for the same reason (it isn't a task, and
   treating it as one would hide a process-boundary crossing from L3/L4).
 - `declared_variables` is always `{}`. No verified UiPath convention for a
@@ -48,6 +53,7 @@ from __future__ import annotations
 import hashlib
 
 from lxml import etree
+
 from wfeval.core.ast import Element, ElementKind, Flow, LoopSpec, WorkflowAST
 
 from .errors import AdapterParseError
@@ -110,6 +116,8 @@ def parse(content: str, *, platform: str = "uipath_maestro") -> WorkflowAST:
             attributes = _uipath_attributes(el)
             if kind == ElementKind.TIMER:
                 attributes.update(_timer_attributes(el))
+            elif kind == ElementKind.INTERMEDIATE_EVENT:
+                attributes.update(_intermediate_event_attributes(el, tag))
             elements.append(Element(
                 id=_require_id(el),
                 kind=kind,
@@ -166,6 +174,36 @@ def _require_id(el: etree._Element) -> str:
     return el_id
 
 
+_EVENT_DEFINITION_TAGS = (
+    "errorEventDefinition", "messageEventDefinition",
+    "signalEventDefinition", "escalationEventDefinition",
+)
+
+
+def _event_definition_kind(el: etree._Element) -> str | None:
+    for def_tag in _EVENT_DEFINITION_TAGS:
+        if _child(el, def_tag) is not None:
+            return def_tag.removesuffix("EventDefinition").lower()
+    return None
+
+
+def _intermediate_event_attributes(el: etree._Element, tag: str) -> dict[str, str]:
+    """Non-timer catch/throw/boundary events: the definition kind, plus, for a
+    boundary event, what task it watches and whether it interrupts it -- the
+    routing facts a consumer needs without a per-definition ElementKind. See
+    docs/decisions/0021."""
+    attrs = {"bpmn_tag": tag}
+    definition = _event_definition_kind(el)
+    if definition:
+        attrs["event_definition"] = definition
+    if tag == "boundaryEvent":
+        attached = el.get("attachedToRef")
+        if attached:
+            attrs["attached_to_ref"] = attached
+        attrs["cancel_activity"] = el.get("cancelActivity", "true")
+    return attrs
+
+
 _TIMER_VALUE_TAGS = ("timeDuration", "timeDate", "timeCycle")
 
 
@@ -197,9 +235,11 @@ def _kind_for(el: etree._Element) -> ElementKind:
     if tag in ("intermediateCatchEvent", "intermediateThrowEvent", "boundaryEvent"):
         if _child(el, "timerEventDefinition") is not None:
             return ElementKind.TIMER
+        if _event_definition_kind(el) is not None:
+            return ElementKind.INTERMEDIATE_EVENT
         raise AdapterParseError(
-            f"<{tag} id={el.get('id')!r}>: only timerEventDefinition is supported today "
-            "(no ElementKind exists yet for message/error/signal/escalation events)."
+            f"<{tag} id={el.get('id')!r}>: no recognised event definition "
+            "(timer/message/error/signal/escalation)."
         )
     if tag == "exclusiveGateway":
         return ElementKind.GATEWAY_EXCLUSIVE
