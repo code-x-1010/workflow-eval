@@ -92,8 +92,32 @@ Two separate causes, worth keeping apart:
   lint rules for four agents is a bigger call than unbreaking the build, and it
   belongs to whoever owns the config.
 
+## Addendum, 2026-08-06 (P1)
+
+Pinned `ruff==0.16.1` and added `known-first-party = ["wfeval"]`. As predicted
+in this record's own Consequences section, that second line didn't just fix
+`services/validation/`'s two `I001`s — it moved `wfeval.*` into its own import
+group everywhere, which surfaced 19 more `I001`s across files that mix
+`wfeval` imports with third-party ones. Ran `ruff check --fix` scoped to
+exactly the files in P1's lane (`packages/`, `services/gateway/`,
+`services/validation/`, `tests/unit/{adapters,core,gateway,validation}/`,
+`docs/examples/sample_client.py`) — 19 fixed. Also fixed
+`docs/examples/sample_client.py`'s `EXE001` (`chmod +x`) and `RUF100` (a
+`noqa` ruff 0.16.1 no longer needs).
+
+**Left for their owners, same shape of fix (`ruff check --fix` on their own
+files only) — confirmed present, not touched:** `datasets/run_alignment.py`
+(P2), `services/intent/src/main.py` + `tests/unit/intent/**` (P2),
+`services/sandbox/src/main.py` + `services/sandbox/src/runners/spiff/engine.py`
++ `tests/unit/sandbox/**` (P3). `services/cost/src/main.py`'s `I001` (P4) was
+already clean — nothing to do there. `make lint` / CI's lint step stays red
+until P2 and P3 each run this in their own lane; it's one command, not a
+design decision.
+
 ## Sign-off
 
 - [x] P2
-- [ ] P1 — the pin and the `known-first-party` line; also the two `I001`s in `services/validation/`
-- [ ] P4 — the one `I001` in `services/cost/src/main.py`
+- [x] P1 — pin, `known-first-party`, own-lane `I001`s/`EXE001`/`RUF100` fixed
+- [ ] P2 — `datasets/`, `services/intent/`, `tests/unit/intent/` still need `ruff check --fix`
+- [ ] P3 — `services/sandbox/`, `tests/unit/sandbox/` still need `ruff check --fix`
+- [ ] P4 — awareness only, nothing to do (already clean)

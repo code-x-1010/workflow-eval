@@ -66,8 +66,28 @@ end up not doing it.
 I have left `datasets/README.md`'s reference in place: the documented invocation
 is the right one, and rewording it to hide a missing script helps nobody.
 
+## Addendum, 2026-08-06 (P1)
+
+Wrote `scripts/run_corpus.py`. Kept ownership rather than reassigning — the
+CLI shape the Makefile/CI already commit to (`--corpus`, `--out`) plus
+Validation being P1's own service made this a natural fit once it was clear
+what it should actually do.
+
+Split exactly along the line `datasets/run_alignment.py`'s own docstring
+already proposed: this script runs Validation's L1-L4 in-process against
+every `reference.bpmn` (P1's tier), and **calls** `run_alignment.run_case`
+for the intent numbers rather than reimplementing P2's differ/sufficiency/
+testgen pipeline. Writes one `corpus_run.json` per run when `--out` is given,
+prints a short summary either way, and always exits 0 — this is a regression
+report, not a merge gate, matching the job already being `schedule`-only.
+
+Verified live against the real corpus: 40/40 pass every Validation gate,
+0/40 skipped on the intent side (`0021` fixed the 5 that used to skip on
+`0020`). No `Makefile`/CI change needed — both already invoke exactly the
+CLI this script implements.
+
 ## Sign-off
 
 - [x] P2
-- [ ] P1 — owner of `scripts/`, `Makefile`, CI: (1) and (2), or reassign
-- [ ] P4 — awareness: the corpus run is what feeds the baseline scorecard
+- [x] P1 — wrote `scripts/run_corpus.py`, calling `run_alignment.run_case` per its own docstring
+- [ ] P4 — awareness: `corpus_run.json`'s `validation`/`alignment` shape is what would feed a scorecard

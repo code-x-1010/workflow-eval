@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 
 from lxml import etree
+
 from wfeval.core.dmn import Decision, DecisionModel, DecisionTable, HitPolicy, InputClause, OutputClause, Rule
 
 from .errors import AdapterParseError

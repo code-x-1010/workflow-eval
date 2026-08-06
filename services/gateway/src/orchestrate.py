@@ -34,6 +34,7 @@ from typing import Any
 
 import httpx
 import yaml
+
 from wfeval.core.report import (
     CostReport,
     EvaluationReport,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from wfeval.adapters.dmn import parse
 from wfeval.adapters.errors import AdapterParseError
 from wfeval.core.dmn import HitPolicy

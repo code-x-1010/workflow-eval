@@ -21,6 +21,7 @@ checks that don't have anything to run against yet:
 from __future__ import annotations
 
 import httpx
+
 from wfeval.core.ast import Element, WorkflowAST
 from wfeval.core.diagnostics import Diagnostic, Severity
 

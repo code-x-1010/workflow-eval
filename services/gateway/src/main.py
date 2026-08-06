@@ -14,6 +14,7 @@ this is open-by-default when GATEWAY_API_KEYS is unset.
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
+
 from wfeval.core.stubs import golden
 
 from . import orchestrate

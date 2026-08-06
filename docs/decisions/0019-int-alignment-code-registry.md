@@ -120,5 +120,9 @@ calibration figure is for.
 ## Sign-off
 
 - [x] P2
-- [ ] P1 — awareness; and the `gates`/severity limitation above is worth a decision of its own
+- [x] P1 — awareness noted. Agree `IntentReport` having no `gates` field (so
+      `INT-CONDITION-NOT-EXPRESSED` can't outrank "an integration is missing"
+      in severity) is worth its own decision rather than folding into this
+      one — not doing that design work in this pass; flagging it stays open
+      rather than silently dropped.
 - [ ] P4 — awareness: `intent_coverage` is the number that reaches the scorecard

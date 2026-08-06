@@ -5,10 +5,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from services.validation.src import dmn_analysis
 from wfeval.adapters.dmn import parse
 from wfeval.core.dmn import Decision, DecisionModel, DecisionTable, HitPolicy, InputClause, OutputClause, Rule
-
-from services.validation.src import dmn_analysis
 
 ROOT = Path(__file__).resolve().parents[3]
 

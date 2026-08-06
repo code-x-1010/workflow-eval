@@ -13,10 +13,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import httpx
-from wfeval.adapters.bpmn import parse
-from wfeval.core.ast import Element, ElementKind, WorkflowAST
 
 from services.validation.src import l2_references
+from wfeval.adapters.bpmn import parse
+from wfeval.core.ast import Element, ElementKind, WorkflowAST
 
 ROOT = Path(__file__).resolve().parents[3]
 ASSETS_URL = "http://sandbox:8003/v1/assets"

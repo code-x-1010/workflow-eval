@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-from wfeval.core.report import EvaluationReport, Verdict
 
 from services.gateway.src import webhook
+from wfeval.core.report import EvaluationReport, Verdict
 
 _REPORT = EvaluationReport(
     evaluation_id="ev_test", request_id="req_test", platform="uipath_maestro",

@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from wfeval.adapters.bpmn import parse
 from wfeval.adapters.errors import AdapterParseError
 from wfeval.core.ast import ElementKind
@@ -130,7 +131,32 @@ def test_unsupported_element_raises_rather_than_silently_dropping():
         parse(xml)
 
 
-def test_unsupported_event_definition_raises_rather_than_silently_dropping():
+def test_boundary_error_event_maps_to_intermediate_event_with_routing_attributes():
+    # docs/decisions/0021: was AdapterParseError before this fix -- see
+    # docs/decisions/0020 for the 5 corpus cases this unblocked.
+    xml = """<?xml version="1.0"?>
+    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+      <process id="p">
+        <startEvent id="s"/>
+        <serviceTask id="t" name="Call API"/>
+        <boundaryEvent id="b" attachedToRef="t" cancelActivity="false" name="API failed">
+          <errorEventDefinition/>
+        </boundaryEvent>
+      </process>
+    </definitions>"""
+    ast = parse(xml)
+    boundary = ast.element("b")
+    assert boundary is not None
+    assert boundary.kind == ElementKind.INTERMEDIATE_EVENT
+    assert boundary.attributes == {
+        "bpmn_tag": "boundaryEvent",
+        "event_definition": "error",
+        "attached_to_ref": "t",
+        "cancel_activity": "false",
+    }
+
+
+def test_message_intermediate_catch_event_maps_to_intermediate_event():
     xml = """<?xml version="1.0"?>
     <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
       <process id="p">
@@ -139,7 +165,23 @@ def test_unsupported_event_definition_raises_rather_than_silently_dropping():
         </intermediateCatchEvent>
       </process>
     </definitions>"""
-    with pytest.raises(AdapterParseError, match="messageEventDefinition|intermediateCatchEvent"):
+    ast = parse(xml)
+    caught = ast.element("msg")
+    assert caught is not None
+    assert caught.kind == ElementKind.INTERMEDIATE_EVENT
+    assert caught.attributes == {"bpmn_tag": "intermediateCatchEvent", "event_definition": "message"}
+
+
+def test_event_with_no_recognised_definition_still_raises():
+    xml = """<?xml version="1.0"?>
+    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+      <process id="p">
+        <intermediateCatchEvent id="cmp">
+          <compensateEventDefinition/>
+        </intermediateCatchEvent>
+      </process>
+    </definitions>"""
+    with pytest.raises(AdapterParseError, match="no recognised event definition"):
         parse(xml)
 
 

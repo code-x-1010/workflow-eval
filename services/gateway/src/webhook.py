@@ -27,6 +27,7 @@ import os
 from urllib.parse import urlparse
 
 import httpx
+
 from wfeval.core.report import EvaluationReport
 
 logger = logging.getLogger(__name__)

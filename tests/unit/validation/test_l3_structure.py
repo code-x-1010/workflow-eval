@@ -11,10 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from services.validation.src import l3_structure
 from wfeval.adapters.bpmn import parse
 from wfeval.core.ast import Element, ElementKind, Flow, WorkflowAST
-
-from services.validation.src import l3_structure
 
 ROOT = Path(__file__).resolve().parents[3]
 

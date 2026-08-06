@@ -102,4 +102,10 @@ including the `root_packages` line, since a disabled contract looks identical to
 a passing one in CI output.
 
 - [x] P2 — executed
-- [ ] P1 — awareness, and a view on the `root_packages` scope above
+- [x] P1 — awareness noted. View on `root_packages`: keep it as landed (whole
+      `services` graph, 21→85 files). It's the smallest change that makes the
+      guarantee real, no measured `make lint` slowdown, and scoping it down to
+      just `services.intent` would need revisiting the day a second service
+      gets its own frozen-import contract anyway. Reopen if a future session's
+      unrelated import change actually gets blocked by this and the noise
+      becomes real rather than hypothetical.

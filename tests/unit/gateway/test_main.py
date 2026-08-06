@@ -8,10 +8,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
-from wfeval.core.report import EvaluationReport, Verdict
 
 from services.gateway.src.main import app
 from services.gateway.src.orchestrate import DependencyUnavailable
+from wfeval.core.report import EvaluationReport, Verdict
 
 client = TestClient(app)
 
