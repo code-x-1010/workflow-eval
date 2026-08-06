@@ -1,0 +1,54 @@
+{"id": "j001", "step": "Route it to a manager for approval", "element": "Manager approval", "label": "match", "why": "same act, noun vs verb phrasing", "provenance": "authored_by_p2"}
+{"id": "j002", "step": "Pay it automatically", "element": "Automatic payment", "label": "match", "why": "same act, nominalised", "provenance": "authored_by_p2"}
+{"id": "j003", "step": "Notify the vendor when it is settled", "element": "Send settlement confirmation", "label": "match", "why": "same recipient and event, no shared verb", "provenance": "authored_by_p2"}
+{"id": "j004", "step": "Extract the vendor and the amount", "element": "Parse invoice fields", "label": "match", "why": "extraction of the same fields, zero token overlap", "provenance": "authored_by_p2"}
+{"id": "j005", "step": "File the receipt in the accounting system", "element": "Archive receipt", "label": "match", "why": "file/archive are the same act here", "provenance": "authored_by_p2"}
+{"id": "j006", "step": "Check their remaining balance", "element": "Validate leave balance", "label": "match", "why": "same check, domain-qualified name", "provenance": "authored_by_p2"}
+{"id": "j007", "step": "Deduct the days from the balance", "element": "Update balance", "label": "match", "why": "the update is the deduction", "provenance": "authored_by_p2"}
+{"id": "j008", "step": "Put the leave in the team calendar", "element": "Create calendar entry", "label": "match", "why": "same effect on the same system", "provenance": "authored_by_p2"}
+{"id": "j009", "step": "Page the on-call engineer", "element": "Notify on-call", "label": "match", "why": "paging is the notification channel", "provenance": "authored_by_p2"}
+{"id": "j010", "step": "Open an incident channel", "element": "Create bridge channel", "label": "match", "why": "bridge and incident channel are one thing", "provenance": "authored_by_p2"}
+{"id": "j011", "step": "Score the lead for fit", "element": "Lead scoring", "label": "match", "why": "gerund form of the same step", "provenance": "authored_by_p2"}
+{"id": "j012", "step": "Assign to an account executive", "element": "Assign owner", "label": "match", "why": "the AE is the owner being assigned", "provenance": "authored_by_p2"}
+{"id": "j013", "step": "Send the decision letter", "element": "Issue decision correspondence", "label": "match", "why": "send/issue, letter/correspondence", "provenance": "authored_by_p2"}
+{"id": "j014", "step": "Snapshot each host before patching", "element": "Take host snapshot", "label": "match", "why": "same act, verb hoisted", "provenance": "authored_by_p2"}
+{"id": "j015", "step": "Roll that host back from the snapshot", "element": "Restore from snapshot", "label": "match", "why": "rollback is the restore", "provenance": "authored_by_p2"}
+{"id": "j016", "step": "Reset the password", "element": "Perform password reset", "label": "match", "why": "same act, padded", "provenance": "authored_by_p2"}
+{"id": "j017", "step": "Force a change at next logon", "element": "Set password change flag", "label": "match", "why": "the flag is how the force is implemented", "provenance": "authored_by_p2"}
+{"id": "j018", "step": "Generate the document from our standard template", "element": "Render NDA from template", "label": "match", "why": "generate/render, document/NDA", "provenance": "authored_by_p2"}
+{"id": "j019", "step": "Store it in the document management system", "element": "Save to DMS", "label": "match", "why": "abbreviation of the same target", "provenance": "authored_by_p2"}
+{"id": "j020", "step": "Email it to the counterparty for signature", "element": "Send for e-signature", "label": "match", "why": "same act, recipient implied", "provenance": "authored_by_p2"}
+{"id": "j021", "step": "Classify each document as you receive it", "element": "Document classification", "label": "match", "why": "gerund form", "provenance": "authored_by_p2"}
+{"id": "j022", "step": "Run a fraud score on the claim", "element": "Fraud scoring", "label": "match", "why": "gerund form", "provenance": "authored_by_p2"}
+{"id": "j023", "step": "Revoke their system access", "element": "Disable accounts", "label": "match", "why": "revocation implemented as disabling", "provenance": "authored_by_p2"}
+{"id": "j024", "step": "Collect their equipment", "element": "Equipment return", "label": "match", "why": "same act from the other party's view", "provenance": "authored_by_p2"}
+{"id": "j025", "step": "Archive their mailbox", "element": "Mailbox archival", "label": "match", "why": "nominalised", "provenance": "authored_by_p2"}
+{"id": "j026", "step": "Enrich it with the affected service and recent deploys", "element": "Alert enrichment", "label": "match", "why": "nominalised", "provenance": "authored_by_p2"}
+{"id": "j027", "step": "The on-call writes a postmortem", "element": "Author incident review", "label": "match", "why": "postmortem and incident review are one artifact", "provenance": "authored_by_p2"}
+{"id": "j028", "step": "Route it to a manager for approval", "element": "Notify the manager", "label": "no_match", "why": "telling a manager is not asking one to decide", "provenance": "authored_by_p2"}
+{"id": "j029", "step": "Pay it automatically", "element": "Reverse the payment", "label": "no_match", "why": "opposite direction of funds", "provenance": "authored_by_p2"}
+{"id": "j030", "step": "Notify the vendor when it is settled", "element": "Notify the customer", "label": "no_match", "why": "same act, different recipient", "provenance": "authored_by_p2"}
+{"id": "j031", "step": "Extract the vendor and the amount", "element": "Validate the vendor", "label": "no_match", "why": "reading a field is not checking it", "provenance": "authored_by_p2"}
+{"id": "j032", "step": "Check their remaining balance", "element": "Top up the balance", "label": "no_match", "why": "read vs write", "provenance": "authored_by_p2"}
+{"id": "j033", "step": "Page the on-call engineer", "element": "Assign to the duty queue", "label": "no_match", "why": "different escalation path entirely", "provenance": "authored_by_p2"}
+{"id": "j034", "step": "Score the lead for fit", "element": "Enrich the lead record", "label": "no_match", "why": "enrichment feeds scoring, it is not scoring", "provenance": "authored_by_p2"}
+{"id": "j035", "step": "Approve the claim", "element": "Decline the claim", "label": "no_match", "why": "opposite outcomes", "provenance": "authored_by_p2"}
+{"id": "j036", "step": "Snapshot each host before patching", "element": "Patch each host", "label": "no_match", "why": "the backup is not the change", "provenance": "authored_by_p2"}
+{"id": "j037", "step": "Reset the password", "element": "Lock the account", "label": "no_match", "why": "different remedy", "provenance": "authored_by_p2"}
+{"id": "j038", "step": "Store it in the document management system", "element": "Delete it from the document management system", "label": "no_match", "why": "opposite acts, near-identical wording", "provenance": "authored_by_p2"}
+{"id": "j039", "step": "Send the decision letter", "element": "Log the decision", "label": "no_match", "why": "telling the applicant is not recording internally", "provenance": "authored_by_p2"}
+{"id": "j040", "step": "Revoke their system access", "element": "Grant system access", "label": "no_match", "why": "opposite acts", "provenance": "authored_by_p2"}
+{"id": "j041", "step": "Open an incident channel", "element": "Close the incident", "label": "no_match", "why": "opposite ends of the lifecycle", "provenance": "authored_by_p2"}
+{"id": "j042", "step": "Classify each document as you receive it", "element": "Translate the document", "label": "no_match", "why": "different processing", "provenance": "authored_by_p2"}
+{"id": "j043", "step": "Run a fraud score on the claim", "element": "Run a credit score", "label": "no_match", "why": "different model, different decision", "provenance": "authored_by_p2"}
+{"id": "j044", "step": "Notify the vendor when it is settled", "element": "Notify finance of the exception", "label": "no_match", "why": "different recipient and different event", "provenance": "authored_by_p2"}
+{"id": "j045", "step": "Archive their mailbox", "element": "Forward their mailbox", "label": "no_match", "why": "retention vs redirection", "provenance": "authored_by_p2"}
+{"id": "j046", "step": "Assign to an account executive", "element": "Assign to a recruiter", "label": "no_match", "why": "different role, same verb", "provenance": "authored_by_p2"}
+{"id": "j047", "step": "Reimburse the employee", "element": "Invoice the employee", "label": "no_match", "why": "opposite direction of funds", "provenance": "authored_by_p2"}
+{"id": "j048", "step": "Book the spend against the department budget", "element": "Request additional budget", "label": "no_match", "why": "spending is not asking for more", "provenance": "authored_by_p2"}
+{"id": "j049", "step": "Publish to the site", "element": "Preview on the site", "label": "no_match", "why": "public vs internal", "provenance": "authored_by_p2"}
+{"id": "j050", "step": "Release the slot and offer it to the waiting list", "element": "Reserve the slot", "label": "no_match", "why": "opposite acts", "provenance": "authored_by_p2"}
+{"id": "j051", "step": "Mark the appointment confirmed", "element": "Cancel the appointment", "label": "no_match", "why": "opposite outcomes", "provenance": "authored_by_p2"}
+{"id": "j052", "step": "Add it to an exceptions list", "element": "Add it to the run list", "label": "no_match", "why": "failure bucket vs work queue", "provenance": "authored_by_p2"}
+{"id": "j053", "step": "Grant the entitlement", "element": "Log it in the access register", "label": "no_match", "why": "the grant is not the audit record", "provenance": "authored_by_p2"}
+{"id": "j054", "step": "Take the payment", "element": "Refund the payment", "label": "no_match", "why": "opposite direction of funds", "provenance": "authored_by_p2"}

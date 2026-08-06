@@ -27,10 +27,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tools.bpmn import check, derive_patterns, emit  # noqa: E402
-from tools.case import Case  # noqa: E402
-from tools.cases import ALL_CASES  # noqa: E402
-from tools.spec_codes import SPEC_CODES, unknown  # noqa: E402
+from tools.bpmn import check, derive_patterns, emit
+from tools.case import Case
+from tools.cases import ALL_CASES
+from tools.spec_codes import SPEC_CODES, unknown
 
 CORPUS_VERSION = "1.0"
 BUILT = "2026-08-03"  # bump by hand; keeps rebuilds byte-identical
