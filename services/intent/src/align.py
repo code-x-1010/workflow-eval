@@ -44,6 +44,8 @@ from wfeval.core.ast import Element, ElementKind, WorkflowAST
 from wfeval.core.diagnostics import Diagnostic, Severity
 from wfeval.core.ir import Spec, Step
 
+from .extract import INTEGRATION_VOCABULARY
+
 ALIGNER_VERSION = "d6.1"
 
 # Element kinds that can carry a spec step. Gateways and events are structure,
@@ -216,19 +218,46 @@ def _match(steps: list[Step], candidates: list[Element]) -> list[Match]:
     return matches
 
 
+def _attachments(ast: WorkflowAST) -> dict[str, list[str]]:
+    """Host element id -> the boundary events watching it.
+
+    A boundary event has no incoming `sequenceFlow`. BPMN attaches it to the task
+    it watches with `attachedToRef`, which the adapter records in
+    `attributes["attached_to_ref"]` (`0021`). Control still reaches it -- that is
+    the entire point of an error boundary event -- so for reachability the
+    attachment *is* a control-flow edge and has to be walked like one.
+    """
+    out: dict[str, list[str]] = {}
+    for element in ast.elements:
+        host = element.attributes.get("attached_to_ref")
+        if host:
+            out.setdefault(host, []).append(element.id)
+    return out
+
+
 def _reachability(ast: WorkflowAST) -> dict[str, set[str]]:
     """Forward reachability per element. Small graphs; a BFS each is fine and
-    stays obviously correct, which matters more here than the asymptotics."""
+    stays obviously correct, which matters more here than the asymptotics.
+
+    Walks sequence flows *and* boundary attachments. Flows alone strand every
+    error handler in the corpus: the boundary event has no incoming flow, so it
+    is unreachable from the start event and so is the whole chain behind it.
+    """
+    attached = _attachments(ast)
+
+    def successors(eid: str) -> list[str]:
+        return ast.successors(eid) + attached.get(eid, [])
+
     out: dict[str, set[str]] = {}
     for element in ast.elements:
         seen: set[str] = set()
-        queue = deque(ast.successors(element.id))
+        queue = deque(successors(element.id))
         while queue:
             nxt = queue.popleft()
             if nxt in seen:
                 continue
             seen.add(nxt)
-            queue.extend(ast.successors(nxt))
+            queue.extend(successors(nxt))
         out[element.id] = seen
     return out
 
@@ -411,16 +440,51 @@ def _trigger_mismatch(spec: Spec, ast: WorkflowAST) -> list[Diagnostic]:
     return []
 
 
+_IDENTIFIER_BREAK_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _artifact_vocabulary(ast: WorkflowAST) -> str:
+    """Everything in the artifact that could name an integration, flattened into
+    prose so the prompt-side patterns can be run over it.
+
+    `asset_ref`s and platform attributes are identifiers, not sentences --
+    `PaymentsApi_Prod`, `stripe-charge-v2`. Splitting camel case and punctuation
+    into spaces is what lets a vocabulary pattern written for prose ("payments
+    api") match one.
+    """
+    parts: list[str] = []
+    for element in ast.elements:
+        parts += [element.name or "", element.asset_ref or "", *element.attributes.values()]
+    return re.sub(r"[_\-.]+", " ", _IDENTIFIER_BREAK_RE.sub(" ", " ".join(parts))).lower()
+
+
+def _invoked(integration: str, haystack: str) -> bool:
+    """Two ways to count as invoked, and the vocabulary is the one that matters.
+
+    The literal-token check alone reports a workflow that plainly calls the
+    payments API as missing it: the extractor canonicalises "the payment API" to
+    `payments_api`, and the artifact names the task "Auto-pay invoice" with a
+    "Payment API failed" boundary event -- so `payments`, plural, is not in it.
+    Matching `INTEGRATION_VOCABULARY` instead asks the question the extractor
+    already answered in the other direction, against the same words.
+
+    The token check is kept underneath rather than replaced, because an artifact
+    may name a system the prompt vocabulary does not cover at all (a bare
+    `asset_ref` of `hris`). Both are widening: neither can invent a finding.
+    """
+    pattern = INTEGRATION_VOCABULARY.get(integration)
+    if pattern and re.search(pattern, haystack):
+        return True
+    needles = {integration, integration.replace("_", " "), integration.split("_")[0]}
+    return any(n and n in haystack for n in needles)
+
+
 def _integrations_missing(spec: Spec, ast: WorkflowAST) -> list[Diagnostic]:
     """An integration the prompt named that nothing in the artifact invokes."""
-    haystack = " ".join(
-        [(e.name or "") + " " + (e.asset_ref or "") + " " + " ".join(e.attributes.values())
-         for e in ast.elements]
-    ).lower()
+    haystack = _artifact_vocabulary(ast)
     found = []
     for integration in spec.integrations:
-        needles = {integration, integration.replace("_", " "), integration.split("_")[0]}
-        if any(n and n in haystack for n in needles):
+        if _invoked(integration, haystack):
             continue
         found.append(_d(
             "INT-INTEGRATION-MISSING",

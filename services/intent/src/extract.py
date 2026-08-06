@@ -146,7 +146,13 @@ _FAILURE_RE = re.compile(
 # Integration vocabulary. Curated on purpose: an open-ended "any capitalised
 # noun is a system" rule turns every proper noun in the prompt into a fake
 # integration, and P4 prices integrations.
-_INTEGRATIONS: dict[str, str] = {
+#
+# Public because `align.py` matches the *artifact* against the same table. Both
+# directions of the question -- "does the prompt name this system?" and "does the
+# artifact invoke it?" -- are answered by the same vocabulary, and two tables
+# would drift into reporting an integration missing because the artifact happens
+# to spell it the way this one does not.
+INTEGRATION_VOCABULARY: dict[str, str] = {
     "email": r"\b(e-?mails?|inbox|outlook|gmail|mailbox)\b",
     "slack": r"\bslack\b",
     "teams": r"\bms\s?teams\b|\bmicrosoft\s+teams\b",
@@ -438,7 +444,9 @@ def _error_behaviour(text: str) -> str | None:
 
 def _integrations(text: str) -> list[str]:
     lowered = text.lower()
-    return sorted(name for name, pattern in _INTEGRATIONS.items() if re.search(pattern, lowered))
+    return sorted(
+        name for name, pattern in INTEGRATION_VOCABULARY.items() if re.search(pattern, lowered)
+    )
 
 
 def _steps(text: str) -> list[Step]:

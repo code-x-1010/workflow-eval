@@ -1,7 +1,14 @@
 # P2 intent baseline — D10 findings
 
 **Run:** `python datasets/run_alignment.py` (add `--json` for the raw numbers).
-**Date:** 2026-08-05. **Corpus:** 40 `(prompt, artifact)` pairs, `datasets/corpus/`.
+**Date:** 2026-08-06 (first written 2026-08-05).
+**Corpus:** 40 `(prompt, artifact)` pairs, `datasets/corpus/`.
+
+> **Re-run 2026-08-06, after `0020`/`0021` landed.** All 40 artifacts parse now, up
+> from 35, so every number below is computed over the whole corpus for the first
+> time. Making those five visible immediately exposed two false positives in P2's
+> own differ, both since fixed; Finding 3 records what that changed. The
+> superseded 2026-08-05 figures are kept inline where the movement is the point.
 
 This is P2's contribution to the baseline writeup: what the intent tier measures
 today, how much of it can be trusted, and the ranked list of what it finds.
@@ -15,7 +22,7 @@ today, how much of it can be trusted, and the ranked list of what it finds.
 The corpus's reference artifacts are not generator output. Thirty of the forty
 were built artifact-first from a process template and *then* described, so the
 reference is what a perfect generator would have emitted for that prompt. When
-the differ scores 0.762 against one, that is the differ failing to recognise a
+the differ scores 0.795 against one, that is the differ failing to recognise a
 correct workflow — not a workflow being wrong.
 
 That makes this baseline useful for exactly one thing right now: **finding out
@@ -31,11 +38,17 @@ finding below is read that way.
 | Sufficiency precision (`SPEC-*`) | **1.000** | 40/40 prompts |
 | Sufficiency recall | **0.907** | 40/40 prompts |
 | Sufficiency exact-set match | **34/40** | — |
-| Alignment `intent_coverage`, ground-truth references | **0.762** mean, 0.750 median | 25 cases |
-| Alignment `step_coverage`, same | **0.896** mean | 25 cases |
+| Alignment `intent_coverage`, ground-truth references | **0.795** mean, 0.833 median | 30 cases |
+| Alignment `step_coverage`, same | **0.913** mean | 30 cases |
+| Alignment `intent_coverage`, under-specified | **0.800** mean, 1.000 median | 10 cases |
 | Judge agreement | **0.407** | 54 calibration pairs |
-| Cases generated | **94** (18 boundary) | 40 prompts |
-| Artifacts skipped, unparseable | **5** | decision `0020` |
+| Cases generated | **94** (18 boundary, 19 mocks) | 40 prompts |
+| Artifacts skipped, unparseable | **0** | was 5, `0020` |
+
+`intent_coverage` on ground-truth references is not comparable to the
+2026-08-05 figure of 0.762: that was 25 cases, this is those 25 plus the five
+`0020` used to exclude. Measured over the same 30 cases, it moved 0.744 → 0.795
+across this session's two fixes.
 
 ---
 
@@ -112,7 +125,7 @@ first, reserve the judge for the residue* — and it is why
 
 **It does not mean matching is broken.** `align.py` runs the same lexical
 comparison over *all* pairs, most of which are easy, and gets step coverage of
-0.896 on ground-truth references. The 0.407 describes the hard tail only, which
+0.913 on ground-truth references. The 0.407 describes the hard tail only, which
 is what a calibration figure is for.
 
 **Caveat that must travel with this number:** all 54 labels were authored by P2.
@@ -121,36 +134,55 @@ an upper bound. See `datasets/golden/README.md`.
 
 ---
 
-## Finding 3 — The five artifacts we cannot parse are exactly the five that matter for error handling
+## Finding 3 — RESOLVED, and unblocking it broke two things in P2's own differ
 
-`wfeval.adapters.parse()` rejects non-timer boundary events (`0020`), so c01,
-c10, c15, c21 and c25 are skipped. That is 12.5% of the corpus, but it is not a
-random 12.5%: `errorEventDefinition` on a boundary event is *how BPMN expresses
-what happens when a task fails*, so the unparseable cases are precisely the ones
-whose prompts state failure behaviour.
+`0020` is fixed. P1 added `ElementKind.INTERMEDIATE_EVENT` (`0021`) rather than
+reusing `TIMER`, and all 40 artifacts now parse. The five formerly-skipped cases
+score 1.000, 1.000, 1.000, 0.833 and 0.833.
 
-Consequences for anyone reading these numbers:
+The prediction this finding made was wrong, and in the reassuring direction.
+It warned that `INT-NO-ERROR-HANDLING` was under-counted because the five cases
+best able to raise it could not run. They run now, and it still fires exactly
+twice — on c08 and c12, neither of them one of the five. The reason is
+straightforward in hindsight: those five artifacts were unparseable *because*
+they carry error boundary events, which is to say they handle their errors
+correctly. The rule was right to stay quiet.
 
-- `INT-NO-ERROR-HANDLING` fires twice in this run, and cannot fire on any of the
-  five cases best able to raise it. **Do not conclude error handling is a minor
-  issue from this baseline.**
-- c01 is the corpus's negative control, so the one case that proves the pipeline
-  stays quiet on a fully-specified prompt cannot be run end to end.
-- Skipped cases are reported as skipped, never scored zero. Scoring them would
-  attribute an adapter limitation to output quality.
+**What did break was P2's own tooling, in two places, and neither was visible
+while the five cases were skipped.** Both are the house error this baseline
+already names in Finding 4 — reading a P2 blind spot as somebody else's defect:
+
+1. **`INT-UNREACHABLE-INTENT` fired on 5 of 40 cases, all five of them these.**
+   A boundary event has no incoming `sequenceFlow` — BPMN attaches it with
+   `attachedToRef` — so `align._reachability()`, which walked flows only,
+   stranded every error handler in the corpus and reported the *generator* as
+   having left a step unwired. `_attachments()` now walks the attachment as the
+   control-flow edge it is. Mean `intent_coverage` 0.744 → 0.787.
+2. **`INT-INTEGRATION-MISSING` fired on c01, the negative control.**
+   `_integrations_missing()` searched element names for literal tokens, so
+   `payments_api` did not match an artifact naming its task "Auto-pay invoice"
+   with a "Payment API failed" boundary event. It now matches against
+   `extract.INTEGRATION_VOCABULARY` — the same curated table that decided the
+   prompt named the integration in the first place, rather than a second set of
+   token rules that would drift from it. 0.787 → 0.795, and c01 is silent again.
+
+The lesson is the corpus's, not the adapter's: **a case that cannot run cannot
+falsify anything.** Five skipped cases hid two false-positive rules for a full
+day, and one of them was hiding on the negative control — the single case whose
+whole job is to prove this tier does not cry wolf.
 
 ---
 
 ## Finding 4 — The two most common findings are both matcher artefacts, not defects
 
-`INT-EXTRA-SIDE-EFFECT` (13 occurrences, 10/35 cases) and `INT-MISSING-STEP`
-(13 occurrences, 11/35 cases) top the ranked list, on artifacts that are correct
+`INT-EXTRA-SIDE-EFFECT` (13 occurrences, 10/40 cases) and `INT-MISSING-STEP`
+(13 occurrences, 11/40 cases) top the ranked list, on artifacts that are correct
 by construction. Both are the same underlying problem seen from two sides: **the
 matcher cannot pair a step with an element whose name is a paraphrase** — which
 is Finding 2 restated in the alignment tier.
 
 This was much worse before D6 landed a prompt-support check: `INT-EXTRA-SIDE-EFFECT`
-alone fired **83 times** across these same 35 artifacts, because an unmatched
+alone fired **83 times** across the 35 artifacts then parseable, because an unmatched
 element was being read as "the generator invented this" when it actually meant
 "`extract.py` produced no step for it". Consulting the prompt before accusing the
 generator took it to 13 and moved mean `intent_coverage` from 0.306 to 0.773.
@@ -158,20 +190,34 @@ generator took it to 13 and moved mean `intent_coverage` from 0.306 to 0.773.
 The residual 13 are the paraphrase tail. An LLM judge wired into `_match()` is
 the fix, and Finding 2 is the evidence that nothing cheaper will do.
 
+Both counts are unchanged by the 2026-08-06 re-run even though five more
+artifacts entered it, which is its own small result: the five carry no unmatched
+paraphrase, so the tail is a property of how a few specific references are worded
+rather than something that scales with corpus size.
+
+The `INT-INTEGRATION-MISSING` fix in Finding 3 is the same tail met in a place
+where it *was* cheaply fixable — the vocabulary was already curated and simply
+was not being consulted from both directions. That is the distinction worth
+carrying into the `_match()` work: reach for the judge for genuine paraphrase,
+not for a comparison that some existing table already answers.
+
 ---
 
 ## Ranked list — the D10 deliverable
 
-Findings across 35 parseable cases, most frequent first:
+Findings across all 40 cases, most frequent first:
 
 | Occurrences | Cases hit | Code | Read as |
 |---|---|---|---|
-| 13 | 10/35 | `INT-EXTRA-SIDE-EFFECT` | mostly matcher paraphrase failure (Finding 4) |
-| 13 | 11/35 | `INT-MISSING-STEP` | mostly matcher paraphrase failure (Finding 4) |
-| 4 | 4/35 | `INT-CONDITION-NOT-EXPRESSED` | **genuine**: reference artifacts label flows without condition expressions |
-| 2 | 2/35 | `INT-NO-ERROR-HANDLING` | genuine, but under-counted (Finding 3) |
-| 1 | 1/35 | `INT-INTEGRATION-MISSING` | genuine |
-| 1 | 1/35 | `INT-TRIGGER-MISMATCH` | genuine |
+| 13 | 10/40 | `INT-EXTRA-SIDE-EFFECT` | mostly matcher paraphrase failure (Finding 4) |
+| 13 | 11/40 | `INT-MISSING-STEP` | mostly matcher paraphrase failure (Finding 4) |
+| 4 | 4/40 | `INT-CONDITION-NOT-EXPRESSED` | **genuine**: reference artifacts label flows without condition expressions |
+| 2 | 2/40 | `INT-NO-ERROR-HANDLING` | genuine (c08, c12) — and no longer under-counted, see Finding 3 |
+| 2 | 2/40 | `INT-TRIGGER-MISMATCH` | genuine |
+| 1 | 1/40 | `INT-INTEGRATION-MISSING` | **the paraphrase tail again**: c10's "Process refund with provider" is the payments provider, but `provider` alone cannot join the vocabulary without matching a provider of anything |
+
+`INT-UNREACHABLE-INTENT` appeared 6 times in the first run of the full corpus and
+appears zero times now; it was entirely the Finding 3 defect.
 
 `INT-CONDITION-NOT-EXPRESSED` is the most interesting genuine finding. Four
 reference artifacts carry an exclusive gateway whose outgoing flows are *labelled*
@@ -202,12 +248,15 @@ enumerates them so that fixing one is a visible change):
 ## What P2 should do next, in order
 
 1. **Banded thresholds in `extract._branches()`** — triples the test suite
-   (Finding 1). Add the decline tests alongside, not after.
+   (Finding 1). Add the decline tests alongside, not after. Unchanged from the
+   first writing, and now the only item on this list with nothing in front of it.
 2. **An LLM judge in `_match()`** — the only fix for the paraphrase tail, and
-   0.407 is the evidence (Findings 2 and 4).
+   0.407 is the evidence (Findings 2 and 4). Note Finding 4's caveat first: check
+   whether an existing table already answers the comparison, as it did for
+   integrations, before paying for a model call.
 3. **Independent labels for `datasets/golden/`** — until then `judge_agreement`
    is an upper bound and says so.
-4. Re-run this baseline once `0020` lands, so error handling can be measured on
-   the five cases that state it.
+4. ~~Re-run this baseline once `0020` lands~~ — **done, 2026-08-06.** That is
+   this run. See Finding 3 for what it found.
 
-Items 1 and 2 are both inside P2's lane. Items 3 and 4 are not.
+Item 1 and 2 are inside P2's lane. Item 3 is not.

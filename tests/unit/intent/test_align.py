@@ -246,6 +246,54 @@ def test_a_named_integration_that_nothing_invokes_is_reported() -> None:
     assert "INT-INTEGRATION-MISSING" in codes(result)
 
 
+def test_an_integration_the_artifact_words_differently_is_not_reported_missing() -> None:
+    """The c01 regression. `extract.py` canonicalises "the payment API" to
+    `payments_api`; the artifact calls the task "Auto-pay invoice" and its
+    boundary event "Payment API failed". A literal token search for `payments`
+    -- plural -- finds neither, and accuses a workflow that plainly calls the
+    payments API of not calling it. On c01, the corpus's *negative control*.
+    """
+    paid = emit("invoice", [
+        start("Start_invoice", "Invoice received by email", message=True),
+        task("Task_autopay", "Auto-pay invoice", "service", boundary_error={
+            "id": "Boundary_failed", "name": "Payment API failed",
+            "nodes": [task("Task_park", "Park for finance review", "user"),
+                      end("End_parked", "Parked")],
+        }),
+        end("End_done", "Done"),
+    ])
+    result = align(spec(integrations=["payments_api"]), parse(paid), PROMPT)
+    assert "INT-INTEGRATION-MISSING" not in codes(result)
+
+
+def test_an_integration_named_only_by_an_asset_ref_identifier_is_not_reported() -> None:
+    """`asset_ref`s are identifiers, not prose. A vocabulary pattern written for
+    "payments api" has to survive `PaymentsApi_Prod` or the check reports every
+    correctly-referenced integration as absent."""
+    xml = emit("invoice", [
+        start("Start_invoice", "Invoice received by email", message=True),
+        task("Task_pay", "Settle it", "service"),
+        end("End_done", "Done"),
+    ])
+    # Same stamping idiom as `as_agent()` above: `asset_ref` comes from the
+    # namespaced `uipath:assetRef`, which the corpus emitter does not write.
+    xml = xml.replace("<definitions ", f'<definitions xmlns:uipath="{UIPATH_NS}" ', 1)
+    xml = xml.replace('id="Task_pay"', 'id="Task_pay" uipath:assetRef="PaymentsApi_Prod"', 1)
+    ast = parse(xml)
+    paid = ast.element("Task_pay")
+    assert paid is not None and paid.asset_ref == "PaymentsApi_Prod"  # the test is vacuous without this
+    assert "INT-INTEGRATION-MISSING" not in codes(align(spec(integrations=["payments_api"]), ast, PROMPT))
+
+
+def test_widening_the_match_did_not_silence_a_genuinely_absent_integration() -> None:
+    """The fix above only widens, so the risk is that it now matches anything.
+    An artifact whose words are unrelated to the named system must still report:
+    `slack` shares no vocabulary with an invoice workflow."""
+    result = align(spec(integrations=["slack", "esignature"]), parse(artifact()), PROMPT)
+    missing = [d.message for d in result.diagnostics if d.code == "INT-INTEGRATION-MISSING"]
+    assert len(missing) == 2
+
+
 def test_a_stranded_step_is_unreachable_not_missing() -> None:
     """The generator did build it, so a repair that adds it again is the wrong
     fix. What is wrong is the wiring, and only this tier can say which asked-for
@@ -264,6 +312,75 @@ def test_a_stranded_step_is_unreachable_not_missing() -> None:
     result = align(spec(), parse(orphaned), PROMPT)
     assert "INT-UNREACHABLE-INTENT" in codes(result)
     assert "INT-MISSING-STEP" not in [d.code for d in result.diagnostics if "autopay" in (d.element_id or "")]
+
+
+def with_error_handler() -> str:
+    """A payment task with an interrupting error boundary event whose handler
+    parks the invoice. Emitted, not spliced, so `check()` has validated it."""
+    return emit("invoice", [
+        start("Start_invoice", "Invoice received by email", message=True),
+        task("Task_extract", "Extract vendor and amount", "service"),
+        task("Task_autopay", "Pay it automatically", "service", boundary_error={
+            "id": "Boundary_payment_failed",
+            "name": "Payment failed",
+            "nodes": [
+                task("Task_park", "Park the invoice for review", "user"),
+                end("End_parked", "Parked"),
+            ],
+        }),
+        end("End_done", "Done"),
+    ])
+
+
+def spec_with_park() -> Spec:
+    """`spec()` plus the step the error handler implements, so the handler is
+    matched to a step and is therefore eligible to be reported stranded."""
+    return spec(steps=[*spec().steps, Step(
+        id="s5", description="Park the invoice for review", kind_hint="user",
+        depends_on=["s3"], is_deterministic=True, side_effecting=True,
+    )])
+
+
+def test_an_error_handler_behind_a_boundary_event_is_reachable() -> None:
+    """The regression this file exists to prevent re-appearing.
+
+    A boundary event carries no incoming `sequenceFlow` -- it hangs off its task
+    by `attachedToRef` (`0021`). A reachability walk over flows alone therefore
+    strands it and everything behind it, and `INT-UNREACHABLE-INTENT` accuses the
+    generator of leaving a step unwired when the step is wired correctly and the
+    differ cannot see the edge. It fired on 5 of 40 corpus cases the day the
+    adapter learned to parse these -- exactly the 5 that state failure behaviour,
+    including c01, the negative control.
+    """
+    result = align(spec_with_park(), parse(with_error_handler()), PROMPT)
+    stranded = [d.element_id for d in result.diagnostics if d.code == "INT-UNREACHABLE-INTENT"]
+    assert stranded == []
+
+
+def test_the_attachment_edge_is_what_makes_it_reachable() -> None:
+    """Mutation check on the fix above. Strip `attached_to_ref` and the handler
+    goes back to being stranded -- so the assertion in the previous test is
+    carried by `_attachments()`, not by the handler happening to be matched to no
+    step at all."""
+    ast = parse(with_error_handler())
+    for element in ast.elements:
+        element.attributes.pop("attached_to_ref", None)
+    stranded = [d.element_id for d in align(spec_with_park(), ast, PROMPT).diagnostics
+                if d.code == "INT-UNREACHABLE-INTENT"]
+    assert stranded != []
+
+
+def test_a_genuinely_stranded_step_is_still_reported_alongside_a_boundary_event() -> None:
+    """The fix widens reachability, so it could plausibly swallow the real
+    finding. An artifact that has both a legitimate error handler and a truly
+    orphaned task must still report exactly the orphan."""
+    both = with_error_handler().replace(
+        "</process>",
+        '<userTask id="Task_approve" name="Route it to a manager for approval" /></process>',
+    )
+    result = align(spec(), parse(both), PROMPT)
+    stranded = [d.element_id for d in result.diagnostics if d.code == "INT-UNREACHABLE-INTENT"]
+    assert stranded == ["Task_approve"]
 
 
 # ---------- scores ----------
