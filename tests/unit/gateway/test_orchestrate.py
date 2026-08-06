@@ -32,13 +32,18 @@ def _reset_gateway_state():
     orchestrate._EVALUATIONS.clear()
     orchestrate._REQUEST_ID_INDEX.clear()
 
+
+# /v1/executions is 202-shaped: POST returns {execution_id, poll_url}, the
+# real ExecutionReport lives behind the GET -- see orchestrate.py's stage-3
+# comment for why this is two routes, not one.
 ALL_GATES_OK_ROUTES: dict[str, Any] = {
     "http://validation:8001/v1/validate": golden("validation.response.json"),
     "http://cost:8004/v1/cost": golden("cost.response.json"),
     "http://intent:8002/v1/intent": golden("intent.response.json"),
     "http://intent:8002/v1/testcases": golden("testcases.response.json"),
     "http://sandbox:8003/v1/deploy": DEPLOY_ACCEPTED,
-    "http://sandbox:8003/v1/executions": golden("execution.response.json"),
+    "http://sandbox:8003/v1/executions": {"execution_id": "ex_test", "poll_url": "/v1/executions/ex_test"},
+    "http://sandbox:8003/v1/executions/ex_test": golden("execution.response.json"),
 }
 
 FAILING_VALIDATION = {**golden("validation.response.json"), "gates": {"schema_validity": False, "reference_integrity": True}}
@@ -75,7 +80,10 @@ def _fake_client(routes: dict[str, Any], calls: list[str]) -> type:
     return _FakeAsyncClient
 
 
-REQUEST = {"request_id": "req_test", "platform": "uipath_maestro", "format": "bpmn", "content": "<definitions/>", "prompt": "do the thing"}
+REQUEST = {
+    "request_id": "req_test", "platform": "uipath_maestro",
+    "artifact": {"format": "bpmn", "content": "<definitions/>"}, "prompt": "do the thing",
+}
 
 
 @pytest.mark.asyncio
@@ -222,6 +230,22 @@ async def test_dependency_unavailable_raises_a_typed_error():
 
 def test_get_evaluation_unknown_id_returns_none():
     assert orchestrate.get_evaluation("ev_does_not_exist") is None
+
+
+def test_artifact_body_reads_the_nested_contract_shape():
+    """Regression test: _artifact_body used to read format/content as flat
+    top-level request fields, contradicting contracts/gateway.openapi.yaml's
+    ArtifactSubmission (artifact: {format, content}, nested) -- every real
+    client following the published contract got a 500. Found while writing
+    the D10 integration guide's sample client against a live server. See
+    docs/handoff/P1.md, 2026-08-06 entry."""
+    body = orchestrate._artifact_body({"artifact": {"format": "dmn", "content": "<definitions/>"}})
+    assert body == {"format": "dmn", "content": "<definitions/>"}
+
+
+def test_artifact_body_defaults_format_to_bpmn():
+    body = orchestrate._artifact_body({"artifact": {"content": "<definitions/>"}})
+    assert body["format"] == "bpmn"
 
 
 def test_stopgap_score_zero_when_gate_fails():
